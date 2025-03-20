@@ -37,6 +37,7 @@ set(SOURCES
     src/models/LinearRegression.cpp
     src/data/CSVReader.cpp
     src/data/DataFrame.cpp
+    # The PlottingUtility.h is a header-only file, so it's not included here
 )
 
 # Create executable
@@ -56,8 +57,23 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(${PROJECT_NAME} PRIVATE X11 m dl)
 endif()
 
-# Copy Python scripts to build directory if needed
-# file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/src/plotting_scripts DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+# Windows-specific filesystem library (needed for std::filesystem)
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE shlwapi)
+endif()
+
+# Create the plotting_scripts directory if it doesn't exist
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/plotting_scripts)
+
+# Copy the Python script to the build directory
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/plotting_scripts/plot_regression.py
+    ${CMAKE_CURRENT_BINARY_DIR}/plotting_scripts/plot_regression.py
+    COPYONLY
+)
 
 # Install
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/plotting_scripts/ 
+        DESTINATION bin/plotting_scripts
+        FILES_MATCHING PATTERN "*.py")

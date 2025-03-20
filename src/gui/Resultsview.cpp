@@ -6,6 +6,7 @@
 #include <FL/Fl_File_Chooser.H>
 #include <FL/fl_draw.H>
 #include <FL/fl_ask.H>
+#include <FL/Fl_PNG_Image.H>
 #include <fstream>
 #include <iomanip>
 #include <cstdio>
@@ -132,110 +133,140 @@ void PlotWidget::draw() {
 }
 
 void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
-                                 const std::vector<double>& predictedValues,
-                                 const std::string& xLabel,
-                                 const std::string& yLabel,
-                                 const std::string& title) {
-    // Create Python script for plotting
-    std::string tempScriptPath = "temp_plot_script.py";
+        const std::vector<double>& predictedValues,
+        const std::string& xLabel,
+        const std::string& yLabel,
+        const std::string& title) {
+    // Create temporary file paths
     std::string tempDataPath = "temp_plot_data.csv";
-    std::string tempImagePath = "temp_plot_image.ppm";
-    
+    std::string tempImagePath = "temp_plot_image.png"; // Changed from .ppm to .png
+    std::string tempScriptPath = "temp_plot_script.py";
+
     // Write data to temporary file
     std::ofstream dataFile(tempDataPath);
     if (!dataFile.is_open()) {
-        fl_alert("Failed to create temporary data file");
-        return;
+    fl_alert("Failed to create temporary data file");
+    return;
     }
-    
+
     dataFile << "actual,predicted\n";
     for (size_t i = 0; i < std::min(actualValues.size(), predictedValues.size()); ++i) {
-        dataFile << actualValues[i] << "," << predictedValues[i] << "\n";
+    dataFile << actualValues[i] << "," << predictedValues[i] << "\n";
     }
     dataFile.close();
-    
+
     // Create plotting script
     std::ofstream scriptFile(tempScriptPath);
     if (!scriptFile.is_open()) {
-        fl_alert("Failed to create temporary script file");
-        return;
+    fl_alert("Failed to create temporary script file");
+    return;
     }
-    
+
     scriptFile << "import matplotlib.pyplot as plt\n";
     scriptFile << "import pandas as pd\n";
     scriptFile << "import numpy as np\n\n";
-    
+
     // Read data
     scriptFile << "# Read data\n";
     scriptFile << "data = pd.read_csv('" << tempDataPath << "')\n";
     scriptFile << "actual = data['actual']\n";
     scriptFile << "predicted = data['predicted']\n\n";
-    
+
     // Create plot
     scriptFile << "# Create plot\n";
     scriptFile << "plt.figure(figsize=(8, 6), dpi=100)\n";
     scriptFile << "plt.scatter(actual, predicted, alpha=0.7)\n\n";
-    
+
     // Add perfect prediction line
     scriptFile << "# Add perfect prediction line\n";
     scriptFile << "min_val = min(actual.min(), predicted.min())\n";
     scriptFile << "max_val = max(actual.max(), predicted.max())\n";
     scriptFile << "plt.plot([min_val, max_val], [min_val, max_val], 'r--')\n\n";
-    
+
     // Set labels and title
     scriptFile << "# Set labels and title\n";
     scriptFile << "plt.xlabel('" << xLabel << "')\n";
     scriptFile << "plt.ylabel('" << yLabel << "')\n";
     scriptFile << "plt.title('" << title << "')\n";
     scriptFile << "plt.grid(True, linestyle='--', alpha=0.7)\n\n";
-    
-    // Save plot
+
+    // Save plot - using PNG format instead of PPM
     scriptFile << "# Save plot\n";
     scriptFile << "plt.tight_layout()\n";
-    scriptFile << "plt.savefig('" << tempImagePath << "', format='ppm')\n";
+    scriptFile << "plt.savefig('" << tempImagePath << "', format='png')\n"; // Changed to png
+    scriptFile << "print(f'Plot saved as: {'" << tempImagePath << "'}')\n";
     scriptFile << "plt.close()\n";
-    
+
     scriptFile.close();
-    
+
     // Execute Python script
     std::string command = "python " + tempScriptPath;
     int result = std::system(command.c_str());
-    
+
     if (result == 0) {
-        // Load the generated image
-        FILE* imageFile = fopen(tempImagePath.c_str(), "rb");
-        if (!imageFile) {
-            fl_alert("Failed to open generated plot image");
-            return;
-        }
-        
-        // Skip PPM header to get to the pixel data
-        char header[100];
-        int width, height, maxVal;
-        fscanf(imageFile, "%s\n%d %d\n%d\n", header, &width, &height, &maxVal);
-        
-        // Allocate memory for image data
-        if (plotImageData) {
-            delete[] plotImageData;
-        }
-        
-        plotImageWidth = width;
-        plotImageHeight = height;
-        plotImageData = new char[width * height * 3];
-        
-        // Read the pixel data
-        fread(plotImageData, 1, width * height * 3, imageFile);
-        fclose(imageFile);
-        
-        // Redraw the widget
-        redraw();
-    } else {
-        fl_alert("Failed to generate plot");
+    // Load the generated PNG image
+    Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
+
+    if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
+    // Clean up old image data if it exists
+    if (plotImageData) {
+    delete[] plotImageData;
+    plotImageData = nullptr;
     }
-    
+
+    // Update image dimensions
+    plotImageWidth = pngImage->w();
+    plotImageHeight = pngImage->h();
+
+    // Copy image data
+    plotImageData = new char[plotImageWidth * plotImageHeight * 3];
+
+    // Access the RGB data from the Fl_PNG_Image
+    const uchar* imageData = reinterpret_cast<const uchar*>(pngImage->data()[0]);
+    int depth = pngImage->d();
+
+    // Copy the image data with appropriate conversion
+    for (int y = 0; y < plotImageHeight; y++) {
+    for (int x = 0; x < plotImageWidth; x++) {
+    int srcIdx = (y * plotImageWidth + x) * depth;
+    int dstIdx = (y * plotImageWidth + x) * 3;
+
+    if (depth >= 3) {
+    // RGB data
+    plotImageData[dstIdx] = imageData[srcIdx];     // R
+    plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
+    plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
+    } else if (depth == 1) {
+    // Grayscale
+    plotImageData[dstIdx] = 
+    plotImageData[dstIdx+1] = 
+    plotImageData[dstIdx+2] = imageData[srcIdx];
+    }
+    }
+    }
+
+    // Clean up the PNG image
+    delete pngImage;
+
+    // Update the plotBox if it exists
+    if (plotBox) {
+    plotBox->redraw();
+    }
+
+    // Redraw the widget
+    redraw();
+    } else {
+    fl_alert("Failed to load the generated plot image");
+    }
+    } else {
+    fl_alert("Failed to generate plot. Check if Python and matplotlib are installed.");
+    }
+
     // Clean up temporary files
     std::remove(tempScriptPath.c_str());
     std::remove(tempDataPath.c_str());
+    // Don't delete the image immediately, as it might still be in use
+    // Optionally add code to delete it when the app closes
     std::remove(tempImagePath.c_str());
 }
 

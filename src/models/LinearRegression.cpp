@@ -36,10 +36,12 @@ bool LinearRegression::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y) {
         intercept = theta(0);
         coefficients = theta.tail(nFeatures);
 
-        // Calculate statistics
+        // Set isFitted to true before calling functions that depend on it
+        isFitted = true;
+        
+        // Calculate statistics after setting isFitted to true
         calculateStatistics(X, y);
 
-        isFitted = true;
         return true;
     } catch (const std::exception& e) {
         std::cerr << "Error fitting linear regression model: " << e.what() << std::endl;
