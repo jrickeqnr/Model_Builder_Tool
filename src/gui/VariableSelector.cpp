@@ -1,275 +1,254 @@
-#include "gui/VariableSelector.h"
+#include "VariableSelector.h"
 #include <FL/Fl.H>
-#include <FL/Fl_Group.H>
-#include <FL/Fl_Box.H>
 #include <FL/fl_ask.H>
 #include <algorithm>
 
-VariableSelector::VariableSelector(int x, int y, int w, int h) 
-    : Fl_Group(x, y, w, h)
-{
-    begin();
-    
-    // Set group properties
-    box(FL_FLAT_BOX);
-    color(FL_BACKGROUND_COLOR);
-    
-    // Constants for layout
-    int margin = 10;  // Reduced margin
-    int spacing = 10;
-    int buttonHeight = 25;
-    int headerHeight = 40;
-    int bottomButtonsHeight = 30;
-    
-    // Create title label
-    Fl_Box* titleLabel = new Fl_Box(
-        x, y + margin, 
-        w, headerHeight - margin,
-        "Step 3: Select Variables");
-    titleLabel->align(FL_ALIGN_CENTER);
-    titleLabel->labelsize(16);
-    titleLabel->labelfont(FL_BOLD);
-    
-    // Create description label
-    Fl_Box* descriptionLabel = new Fl_Box(
-        x + margin, y + headerHeight, 
-        w - 2*margin, 30,
-        "Select the input variables and target variable for your regression model:");
-    descriptionLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    descriptionLabel->labelsize(12);
-    
-    // Calculate dimensions for the main components
-    int componentY = y + headerHeight + 30 + spacing;
-    int componentHeight = h - headerHeight - 30 - (margin * 2) - bottomButtonsHeight - spacing * 3;
-    int browserWidth = (w - 2*margin - 2*spacing) / 3;
-    int buttonWidth = 40;  // Fixed width for add/remove buttons
-    
-    // Create available variables browser
-    int availableX = x + margin;
-    Fl_Box* availableLabel = new Fl_Box(
-        availableX, componentY, 
-        browserWidth, 20,
-        "Available Variables");
-    availableLabel->align(FL_ALIGN_LEFT);
-    availableLabel->labelsize(12);
-    
-    availableVariablesBrowser = new Fl_Browser(
-        availableX, componentY + 25,
-        browserWidth, componentHeight - 85);  // Reduce height to make room for info box
-    availableVariablesBrowser->type(FL_HOLD_BROWSER);
-    availableVariablesBrowser->callback(availableBrowserCallback, this);
-    
-    // Variable info box - taller to show more content
-    variableInfoBox = new Fl_Box(
-        availableX, componentY + componentHeight - 55,
-        browserWidth, 55, "");
-    variableInfoBox->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
-    variableInfoBox->box(FL_BORDER_BOX);
-    variableInfoBox->labelsize(11);  // Smaller font to fit more text
-    
-    // Create add/remove buttons - centered and with fixed width
-    int buttonsX = availableX + browserWidth + spacing;
-    addButton = new Fl_Button(
-        buttonsX + (spacing/2), componentY + (componentHeight/2) - 20,
-        buttonWidth, buttonHeight, ">");
-    addButton->callback(addButtonCallback, this);
-    addButton->deactivate();
-    
-    removeButton = new Fl_Button(
-        buttonsX + (spacing/2), componentY + (componentHeight/2) + 20,
-        buttonWidth, buttonHeight, "<");
-    removeButton->callback(removeButtonCallback, this);
-    removeButton->deactivate();
-    
-    // Create selected variables browser
-    int selectedX = buttonsX + buttonWidth + spacing;
-    Fl_Box* selectedLabel = new Fl_Box(
-        selectedX, componentY, 
-        browserWidth, 20,
-        "Selected Input Variables");
-    selectedLabel->align(FL_ALIGN_LEFT);
-    selectedLabel->labelsize(12);
-    
-    selectedVariablesBrowser = new Fl_Browser(
-        selectedX, componentY + 25,
-        browserWidth, componentHeight);
-    selectedVariablesBrowser->type(FL_HOLD_BROWSER);
-    selectedVariablesBrowser->callback(selectedBrowserCallback, this);
-    
-    // Create target variable browser
-    int targetX = selectedX + browserWidth + spacing;
-    Fl_Box* targetLabel = new Fl_Box(
-        targetX, componentY, 
-        browserWidth, 20,
-        "Target Variable");
-    targetLabel->align(FL_ALIGN_LEFT);
-    targetLabel->labelsize(12);
-    
-    Fl_Box* targetDescLabel = new Fl_Box(
-        targetX, componentY + 25,
-        browserWidth, 20,
-        "Select the dependent variable:");
-    targetDescLabel->align(FL_ALIGN_LEFT);
-    targetDescLabel->labelsize(11);
-    
-    targetVariableBrowser = new Fl_Browser(
-        targetX, componentY + 50,
-        browserWidth, componentHeight - 25);
-    targetVariableBrowser->type(FL_HOLD_BROWSER);
-    targetVariableBrowser->callback(targetBrowserCallback, this);
-    
-    // Create bottom navigation buttons
-    int bottomY = y + h - margin - bottomButtonsHeight;
-    backButton = new Fl_Button(
-        x + margin, bottomY, 
-        100, bottomButtonsHeight, 
-        "Back");
-    backButton->callback(backButtonCallback_static, this);
-    
-    runButton = new Fl_Button(
-        x + w - margin - 150, bottomY, 
-        150, bottomButtonsHeight, 
-        "Run Regression");
-    runButton->callback(runButtonCallback, this);
-    runButton->deactivate();
-    
-    end();
-    resizable(this);  // Make the widget resizable
+namespace {
+    constexpr int MARGIN = 10;
+    constexpr int SPACING = 10;
+    constexpr int BUTTON_HEIGHT = 25;
+    constexpr int HEADER_HEIGHT = 30;
+    constexpr int BOTTOM_BUTTONS_HEIGHT = 30;
+    constexpr int LABEL_HEIGHT = 20;
+    constexpr int DESC_HEIGHT = 25;
 }
 
-VariableSelector::~VariableSelector() {
-    // FLTK handles widget destruction through parent-child relationship
+struct VariableSelector::Layout {
+    int x, y, w, h;
+    int browserWidth;
+    int componentHeight;
+    int componentY;
+    int buttonsX;
+    int selectedX;
+    int targetX;
+    int bottomY;
+
+    Layout(int x_, int y_, int w_, int h_) 
+        : x(x_), y(y_), w(w_), h(h_) {
+        browserWidth = (w - 2 * MARGIN - 2 * SPACING) / 3;
+        componentHeight = h - 2 * MARGIN - HEADER_HEIGHT - DESC_HEIGHT - BOTTOM_BUTTONS_HEIGHT - SPACING;
+        componentY = y + MARGIN + HEADER_HEIGHT + DESC_HEIGHT;
+        buttonsX = x + MARGIN + browserWidth + SPACING/2;
+        selectedX = buttonsX + BUTTON_HEIGHT + SPACING/2;
+        targetX = selectedX + browserWidth + SPACING;
+        bottomY = y + h - MARGIN - BOTTOM_BUTTONS_HEIGHT;
+    }
+};
+
+VariableSelector::VariableSelector(int x, int y, int w, int h)
+    : Fl_Group(x, y, w, h), layout(std::make_unique<Layout>(x, y, w, h))
+{
+    begin();
+    initUI();
+    end();
+    resizable(this);
+}
+
+VariableSelector::~VariableSelector() = default;
+
+void VariableSelector::initUI() {
+    box(FL_FLAT_BOX);
+    color(FL_BACKGROUND_COLOR);
+    createHeader();
+    createBrowsers();
+    createNavigationButtons();
+}
+
+void VariableSelector::createHeader() {
+    auto* title = new Fl_Box(x(), y() + MARGIN, w(), HEADER_HEIGHT, "Step 3: Select Variables");
+    title->align(FL_ALIGN_CENTER);
+    title->labelsize(16);
+    title->labelfont(FL_BOLD);
+
+    auto* desc = new Fl_Box(x() + MARGIN, y() + MARGIN + HEADER_HEIGHT,
+                          w() - 2 * MARGIN, DESC_HEIGHT,
+                          "Select input and target variables for your regression model:");
+    desc->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    desc->labelsize(12);
+}
+
+void VariableSelector::createBrowsers() {
+    createLabeledBrowser(layout->x + MARGIN, "Available Variables",
+                        availableVariablesBrowser, availableBrowserCallback,
+                        layout->componentY, layout->componentHeight);
+
+    addButton = createButton(layout->buttonsX, layout->componentY + layout->componentHeight/3,
+                           ">", addButtonCallback);
+    removeButton = createButton(layout->buttonsX, layout->componentY + 2*layout->componentHeight/3,
+                              "<", removeButtonCallback);
+
+    createLabeledBrowser(layout->selectedX, "Selected Input Variables",
+                        selectedVariablesBrowser, selectedBrowserCallback,
+                        layout->componentY, layout->componentHeight);
+
+    createTargetBrowser();
+
+    variableInfoBox = new Fl_Box(layout->x + MARGIN,
+                                layout->componentY + layout->componentHeight - 80,
+                                layout->browserWidth, 80, "");
+    variableInfoBox->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+    variableInfoBox->box(FL_BORDER_BOX);
+    variableInfoBox->labelsize(11);
+}
+
+void VariableSelector::createLabeledBrowser(int x, const char* label, Fl_Browser*& browser,
+                                          Fl_Callback* cb, int y, int h) {
+    auto* lbl = new Fl_Box(x, y, layout->browserWidth, LABEL_HEIGHT, label);
+    lbl->align(FL_ALIGN_LEFT);
+    lbl->labelsize(12);
+
+    browser = new Fl_Browser(x, y + LABEL_HEIGHT, layout->browserWidth, h - LABEL_HEIGHT);
+    browser->type(FL_HOLD_BROWSER);
+    browser->callback(cb, this);
+}
+
+void VariableSelector::createTargetBrowser() {
+    auto* label = new Fl_Box(layout->targetX, layout->componentY,
+                           layout->browserWidth, LABEL_HEIGHT, "Target Variable");
+    label->align(FL_ALIGN_LEFT);
+    label->labelsize(12);
+
+    auto* desc = new Fl_Box(layout->targetX, layout->componentY + LABEL_HEIGHT,
+                          layout->browserWidth, DESC_HEIGHT - 5,
+                          "Select dependent variable:");
+    desc->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    desc->labelsize(11);
+
+    targetVariableBrowser = new Fl_Browser(layout->targetX,
+                                         layout->componentY + LABEL_HEIGHT + DESC_HEIGHT - 5,
+                                         layout->browserWidth,
+                                         layout->componentHeight - LABEL_HEIGHT - DESC_HEIGHT + 5);
+    targetVariableBrowser->type(FL_HOLD_BROWSER);
+    targetVariableBrowser->callback(targetBrowserCallback, this);
+}
+
+Fl_Button* VariableSelector::createButton(int x, int y, const char* label, Fl_Callback* cb) {
+    auto* btn = new Fl_Button(x, y, BUTTON_HEIGHT, BUTTON_HEIGHT, label);
+    btn->callback(cb, this);
+    btn->deactivate();
+    return btn;
+}
+
+void VariableSelector::createNavigationButtons() {
+    backButton = new Fl_Button(layout->x + MARGIN, layout->bottomY,
+                              100, BOTTOM_BUTTONS_HEIGHT, "Back");
+    backButton->callback(backButtonCallback_static, this);
+
+    runButton = new Fl_Button(layout->x + layout->w - MARGIN - 150, layout->bottomY,
+                             150, BOTTOM_BUTTONS_HEIGHT, "Run Regression");
+    runButton->callback(runButtonCallback, this);
+    runButton->deactivate();
 }
 
 void VariableSelector::setAvailableVariables(const std::vector<std::string>& variables) {
-    // Clear existing items
     availableVariablesBrowser->clear();
     selectedVariablesBrowser->clear();
     targetVariableBrowser->clear();
-    
-    // Add variables to available list and target browser
+
     for (const auto& var : variables) {
         availableVariablesBrowser->add(var.c_str());
         targetVariableBrowser->add(var.c_str());
     }
-    
-    // Clear variable info
+
     variableInfoBox->label("");
-    
-    // Disable run button initially
     updateRunButtonState();
 }
 
 void VariableSelector::setVariablesSelectedCallback(
     std::function<void(const std::vector<std::string>&, const std::string&)> callback) {
-    variablesSelectedCallback = callback;
+    variablesSelectedCallback = std::move(callback);
 }
 
 void VariableSelector::setBackButtonCallback(std::function<void()> callback) {
-    backButtonCallback = callback;
+    backButtonCallback = std::move(callback);
 }
 
-void VariableSelector::addButtonCallback(Fl_Widget* widget, void* userData) {
-    VariableSelector* self = static_cast<VariableSelector*>(userData);
-    self->handleAddVariableClick();
+void VariableSelector::addButtonCallback(Fl_Widget*, void* data) {
+    static_cast<VariableSelector*>(data)->handleAddVariableClick();
 }
 
-void VariableSelector::removeButtonCallback(Fl_Widget* widget, void* userData) {
-    VariableSelector* self = static_cast<VariableSelector*>(userData);
-    self->handleRemoveVariableClick();
+void VariableSelector::removeButtonCallback(Fl_Widget*, void* data) {
+    static_cast<VariableSelector*>(data)->handleRemoveVariableClick();
 }
 
-void VariableSelector::runButtonCallback(Fl_Widget* widget, void* userData) {
-    VariableSelector* self = static_cast<VariableSelector*>(userData);
-    self->handleRunButtonClick();
+void VariableSelector::runButtonCallback(Fl_Widget*, void* data) {
+    static_cast<VariableSelector*>(data)->handleRunButtonClick();
 }
 
-void VariableSelector::backButtonCallback_static(Fl_Widget* widget, void* userData) {
-    VariableSelector* self = static_cast<VariableSelector*>(userData);
-    self->handleBackButtonClick();
+void VariableSelector::backButtonCallback_static(Fl_Widget*, void* data) {
+    static_cast<VariableSelector*>(data)->handleBackButtonClick();
 }
 
-void VariableSelector::availableBrowserCallback(Fl_Widget* widget, void* userData) {
-    VariableSelector* self = static_cast<VariableSelector*>(userData);
-    self->handleAvailableVariableSelectionChange();
+void VariableSelector::availableBrowserCallback(Fl_Widget*, void* data) {
+    static_cast<VariableSelector*>(data)->handleAvailableVariableSelectionChange();
 }
 
-void VariableSelector::selectedBrowserCallback(Fl_Widget* widget, void* userData) {
-    VariableSelector* self = static_cast<VariableSelector*>(userData);
-    self->handleSelectedVariableSelectionChange();
+void VariableSelector::selectedBrowserCallback(Fl_Widget*, void* data) {
+    static_cast<VariableSelector*>(data)->handleSelectedVariableSelectionChange();
 }
 
-void VariableSelector::targetBrowserCallback(Fl_Widget* widget, void* userData) {
-    VariableSelector* self = static_cast<VariableSelector*>(userData);
-    self->handleTargetVariableChange();
+void VariableSelector::targetBrowserCallback(Fl_Widget*, void* data) {
+    static_cast<VariableSelector*>(data)->handleTargetVariableChange();
 }
 
 void VariableSelector::handleAddVariableClick() {
-    // Get selected variable
-    int selectedIndex = availableVariablesBrowser->value();
-    if (selectedIndex == 0) {
-        return;
-    }
-    
-    const char* variableName = availableVariablesBrowser->text(selectedIndex);
-    if (!variableName) {
-        return;
-    }
-    
-    // Check if variable is already in selected list
+    int selected = availableVariablesBrowser->value();
+    if (!selected) return;
+
+    const char* var = availableVariablesBrowser->text(selected);
+    if (!var) return;
+
     for (int i = 1; i <= selectedVariablesBrowser->size(); ++i) {
-        if (strcmp(selectedVariablesBrowser->text(i), variableName) == 0) {
-            return; // Already exists
-        }
+        if (strcmp(selectedVariablesBrowser->text(i), var) == 0) return;
     }
-    
-    // Add to selected list
-    selectedVariablesBrowser->add(variableName);
-    
-    // Update button states
+
+    selectedVariablesBrowser->add(var);
     updateRunButtonState();
 }
 
 void VariableSelector::handleRemoveVariableClick() {
-    // Get selected variable
-    int selectedIndex = selectedVariablesBrowser->value();
-    if (selectedIndex == 0) {
-        return;
-    }
-    
-    // Remove from selected list
-    selectedVariablesBrowser->remove(selectedIndex);
-    
-    // Update button states
+    int selected = selectedVariablesBrowser->value();
+    if (!selected) return;
+
+    selectedVariablesBrowser->remove(selected);
     updateRunButtonState();
     removeButton->deactivate();
 }
 
-void VariableSelector::handleTargetVariableChange() {
-    // Target variable changed, update run button state
-    updateRunButtonState();
-    
-    // Update variable info if a target is selected
-    int selectedIndex = targetVariableBrowser->value();
-    if (selectedIndex != 0) {
-        const char* variableName = targetVariableBrowser->text(selectedIndex);
-        if (variableName) {
-            // Highlight that this is selected as target
-            // Don't change the variable info box to avoid confusing the user
+void VariableSelector::handleRunButtonClick() {
+    std::vector<std::string> inputs;
+    for (int i = 1; i <= selectedVariablesBrowser->size(); ++i) {
+        if (const char* text = selectedVariablesBrowser->text(i)) {
+            inputs.emplace_back(text);
         }
+    }
+
+    int targetIdx = targetVariableBrowser->value();
+    if (targetIdx <= 0) return;
+
+    const char* target = targetVariableBrowser->text(targetIdx);
+    if (!target) return;
+
+    if (std::find(inputs.begin(), inputs.end(), target) != inputs.end()) {
+        fl_alert("Target variable cannot be an input variable.");
+        return;
+    }
+
+    if (variablesSelectedCallback) {
+        variablesSelectedCallback(inputs, target);
     }
 }
 
+void VariableSelector::handleBackButtonClick() {
+    if (backButtonCallback) backButtonCallback();
+}
+
 void VariableSelector::handleAvailableVariableSelectionChange() {
-    int selectedIndex = availableVariablesBrowser->value();
-    
-    // If a variable is selected, activate the add button, otherwise deactivate it
-    if (selectedIndex != 0) {
+    int selected = availableVariablesBrowser->value();
+    if (selected) {
         addButton->activate();
-        
-        const char* variableName = availableVariablesBrowser->text(selectedIndex);
-        if (variableName) {
-            showVariableInfo(variableName);
+        if (const char* var = availableVariablesBrowser->text(selected)) {
+            showVariableInfo(var);
         }
     } else {
         addButton->deactivate();
@@ -278,82 +257,35 @@ void VariableSelector::handleAvailableVariableSelectionChange() {
 }
 
 void VariableSelector::handleSelectedVariableSelectionChange() {
-    int selectedIndex = selectedVariablesBrowser->value();
-    
-    // If a variable is selected, activate the remove button, otherwise deactivate it
-    if (selectedIndex != 0) {
+    int selected = selectedVariablesBrowser->value();
+    if (selected) {
         removeButton->activate();
-        
-        // Also show variable info for the selected input variable
-        const char* variableName = selectedVariablesBrowser->text(selectedIndex);
-        if (variableName) {
-            showVariableInfo(variableName);
+        if (const char* var = selectedVariablesBrowser->text(selected)) {
+            showVariableInfo(var);
         }
     } else {
         removeButton->deactivate();
     }
 }
 
-void VariableSelector::handleRunButtonClick() {
-    // Get selected input variables
-    std::vector<std::string> inputVariables;
-    for (int i = 1; i <= selectedVariablesBrowser->size(); ++i) {
-        const char* text = selectedVariablesBrowser->text(i);
-        if (text) {
-            inputVariables.push_back(text);
+void VariableSelector::handleTargetVariableChange() {
+    updateRunButtonState();
+    int selected = targetVariableBrowser->value();
+    if (selected) {
+        if (const char* var = targetVariableBrowser->text(selected)) {
+            showVariableInfo(var);
         }
-    }
-    
-    // Get target variable
-    int targetIndex = targetVariableBrowser->value();
-    if (targetIndex <= 0) {
-        return;
-    }
-    
-    const char* targetVariable = targetVariableBrowser->text(targetIndex);
-    if (!targetVariable) {
-        return;
-    }
-    
-    // Check if target variable is also an input variable
-    if (std::find(inputVariables.begin(), inputVariables.end(), targetVariable) != inputVariables.end()) {
-        fl_alert("The target variable cannot also be an input variable.");
-        return;
-    }
-    
-    // Call the callback
-    if (variablesSelectedCallback) {
-        variablesSelectedCallback(inputVariables, targetVariable);
-    }
-}
-
-void VariableSelector::handleBackButtonClick() {
-    if (backButtonCallback) {
-        backButtonCallback();
     }
 }
 
 void VariableSelector::updateRunButtonState() {
-    // Run button is enabled if we have at least one input variable and a target variable
     bool hasInputs = selectedVariablesBrowser->size() > 0;
     bool hasTarget = targetVariableBrowser->value() > 0;
-    
-    if (hasInputs && hasTarget) {
-        runButton->activate();
-    } else {
-        runButton->deactivate();
-    }
+    (hasInputs && hasTarget) ? runButton->activate() : runButton->deactivate();
 }
 
 void VariableSelector::showVariableInfo(const std::string& variableName) {
-    // Here you could add additional information about the variable
-    // For now, just display the variable name
     std::string info = "Variable: " + variableName;
-    
-    // You could add more information here, like data type, range, etc.
-    // info += "\nType: Numeric"; 
-    // info += "\nRange: 0-100";
-    
     variableInfoBox->copy_label(info.c_str());
     variableInfoBox->redraw();
 }
