@@ -7,6 +7,8 @@
 #include <iostream>
 #include <filesystem>
 #include <cstdlib>
+
+#include <Eigen/Dense>
 #include "data/DataFrame.h"
 
 namespace fs = std::filesystem;
