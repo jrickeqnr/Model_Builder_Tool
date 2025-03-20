@@ -8,6 +8,8 @@
 #include <vector>
 #include <string>
 #include <functional>
+#include <sstream>
+#include <iomanip>
 
 #include "data/DataFrame.h"
 #include "models/Model.h"
@@ -56,6 +58,13 @@ public:
      */
     void setBackButtonCallback(std::function<void()> callback);
 
+    /**
+     * @brief Get a formatted equation string representing the model
+     * 
+     * @return std::string Formatted equation string
+     */
+    std::string getEquationString() const;
+
 private:
     std::shared_ptr<Model> model;
     std::shared_ptr<DataFrame> dataFrame;
@@ -63,6 +72,7 @@ private:
     std::string targetVariable;
 
     Fl_Box* modelTitleLabel;
+    Fl_Box* equationDisplay;
     Fl_Group* parametersGroup;
     Fl_Group* statisticsGroup;
     PlotWidget* plotWidget;

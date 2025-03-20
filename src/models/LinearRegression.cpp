@@ -7,7 +7,9 @@ LinearRegression::LinearRegression()
       nSamples(0), nFeatures(0), isFitted(false) {
 }
 
-bool LinearRegression::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y) {
+bool LinearRegression::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y,
+                          const std::vector<std::string>& variableNames,
+                          const std::string& targetName) {
     if (X.rows() != y.rows()) {
         std::cerr << "Error: Number of samples in X (" << X.rows() 
                  << ") does not match number of samples in y (" << y.rows() << ")." << std::endl;
@@ -23,6 +25,31 @@ bool LinearRegression::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y) {
     try {
         nSamples = X.rows();
         nFeatures = X.cols();
+
+        // Store variable names
+        if (variableNames.size() == 0) {
+            // If no variable names provided, generate default ones
+            inputVariableNames.clear();
+            for (int i = 0; i < nFeatures; ++i) {
+                inputVariableNames.push_back("Variable_" + std::to_string(i+1));
+            }
+        } else if (variableNames.size() != nFeatures) {
+            std::cerr << "Warning: Number of variable names (" << variableNames.size()
+                     << ") does not match number of features (" << nFeatures 
+                     << "). Using default names." << std::endl;
+            
+            // Generate default names
+            inputVariableNames.clear();
+            for (int i = 0; i < nFeatures; ++i) {
+                inputVariableNames.push_back("Variable_" + std::to_string(i+1));
+            }
+        } else {
+            // Store the provided variable names
+            inputVariableNames = variableNames;
+        }
+        
+        // Store target variable name
+        targetVariableName = targetName.empty() ? "Target" : targetName;
 
         // Add a column of ones to X for the intercept
         Eigen::MatrixXd X_aug(nSamples, nFeatures + 1);
@@ -72,7 +99,12 @@ std::unordered_map<std::string, double> LinearRegression::getParameters() const 
     params["intercept"] = intercept;
     
     for (int i = 0; i < coefficients.size(); ++i) {
-        params["coefficient_" + std::to_string(i)] = coefficients(i);
+        // Use variable names instead of generic coefficient_N names
+        if (i < inputVariableNames.size()) {
+            params[inputVariableNames[i]] = coefficients(i);
+        } else {
+            params["coefficient_" + std::to_string(i)] = coefficients(i);
+        }
     }
     
     return params;
@@ -111,6 +143,14 @@ double LinearRegression::getAdjustedRSquared() const {
 
 double LinearRegression::getRMSE() const {
     return rmse;
+}
+
+std::vector<std::string> LinearRegression::getVariableNames() const {
+    return inputVariableNames;
+}
+
+std::string LinearRegression::getTargetName() const {
+    return targetVariableName;
 }
 
 void LinearRegression::calculateStatistics(const Eigen::MatrixXd& X, const Eigen::VectorXd& y) {

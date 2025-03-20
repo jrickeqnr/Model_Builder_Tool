@@ -155,7 +155,8 @@ void MainWindow::handleVariablesSelected(const std::vector<std::string>& inputVa
         statusBar->label("Fitting model...");
         Fl::check();  // Update the UI to show the status message
         
-        bool success = model->fit(X, y);
+        // Pass variable names to the model when fitting
+        bool success = model->fit(X, y, inputVariables, targetVariable);
         
         if (success) {
             // Update results view

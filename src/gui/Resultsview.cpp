@@ -289,6 +289,7 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     int margin = 20;
     int headerHeight = 40;
     int bottomButtonsHeight = 40;
+    int equationHeight = 60; // Height for equation display
     
     // Create title label
     modelTitleLabel = new Fl_Box(x + margin, y + margin, w - 2*margin, headerHeight, "Model Results");
@@ -296,9 +297,23 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     modelTitleLabel->labelsize(18);
     modelTitleLabel->labelfont(FL_BOLD);
     
+    // Create equation display box
+    Fl_Box* equationLabel = new Fl_Box(x + margin, y + margin + headerHeight + 5, 
+                                      w - 2*margin, equationHeight, "Regression Equation:");
+    equationLabel->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+    equationLabel->labelsize(14);
+    equationLabel->labelfont(FL_BOLD);
+    
+    // Box to display the actual equation
+    equationDisplay = new Fl_Box(x + margin + 20, y + margin + headerHeight + 25, 
+                                w - 2*margin - 40, equationHeight - 20, "");
+    equationDisplay->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+    equationDisplay->labelsize(14);
+    equationDisplay->box(FL_BORDER_BOX);
+    
     // Create main display area
-    int contentY = y + margin + headerHeight + 10;
-    int contentHeight = h - margin*2 - headerHeight - 10 - bottomButtonsHeight - 10;
+    int contentY = y + margin + headerHeight + equationHeight + 10;
+    int contentHeight = h - margin*2 - headerHeight - equationHeight - 10 - bottomButtonsHeight - 10;
     int tableWidth = (w - margin*3) / 2;
     
     // Parameters group (left side)
@@ -372,6 +387,10 @@ void ResultsView::updateResults() {
     // Update model title
     modelTitleLabel->copy_label((model->getName() + " Model Results").c_str());
     
+    // Update equation display
+    std::string equation = getEquationString();
+    equationDisplay->copy_label(equation.c_str());
+    
     // Update parameters and statistics
     updateParametersDisplay();
     updateStatisticsDisplay();
@@ -428,8 +447,28 @@ void ResultsView::updateParametersDisplay() {
         return;
     }
     
-    // Update table with parameter values
-    table->setData(model->getParameters());
+    // Get parameters
+    auto parameters = model->getParameters();
+    
+    // Reorganize parameters to show intercept first, then coefficients in order
+    std::unordered_map<std::string, double> orderedParams;
+    
+    // Add intercept first
+    auto interceptIt = parameters.find("intercept");
+    if (interceptIt != parameters.end()) {
+        orderedParams["Intercept"] = interceptIt->second;
+    }
+    
+    // Then add coefficients with variable names
+    for (const auto& varName : model->getVariableNames()) {
+        auto coefIt = parameters.find(varName);
+        if (coefIt != parameters.end()) {
+            orderedParams[varName + " (coefficient)"] = coefIt->second;
+        }
+    }
+    
+    // Update table with ordered parameter values
+    table->setData(orderedParams);
 }
 
 void ResultsView::updateStatisticsDisplay() {
@@ -453,8 +492,92 @@ void ResultsView::updateStatisticsDisplay() {
         return;
     }
     
-    // Update table with statistic values
-    table->setData(model->getStatistics());
+    // Get statistics
+    auto statistics = model->getStatistics();
+    
+    // Create a nicer representation of statistics with better names
+    std::unordered_map<std::string, double> formattedStats;
+    
+    // R-squared
+    auto r2 = statistics.find("r_squared");
+    if (r2 != statistics.end()) {
+        formattedStats["R² (coefficient of determination)"] = r2->second;
+    }
+    
+    // Adjusted R-squared
+    auto adjR2 = statistics.find("adjusted_r_squared");
+    if (adjR2 != statistics.end()) {
+        formattedStats["Adjusted R²"] = adjR2->second;
+    }
+    
+    // RMSE
+    auto rmse = statistics.find("rmse");
+    if (rmse != statistics.end()) {
+        formattedStats["RMSE (root mean squared error)"] = rmse->second;
+    }
+    
+    // Number of samples
+    auto samples = statistics.find("n_samples");
+    if (samples != statistics.end()) {
+        formattedStats["Number of observations"] = samples->second;
+    }
+    
+    // Number of features
+    auto features = statistics.find("n_features");
+    if (features != statistics.end()) {
+        formattedStats["Number of variables"] = features->second;
+    }
+    
+    // Update table with formatted statistics
+    table->setData(formattedStats);
+}
+
+std::string ResultsView::getEquationString() const {
+    if (!model) {
+        return "No model available";
+    }
+    
+    std::ostringstream equation;
+    equation << std::fixed << std::setprecision(4);
+    
+    // Get target name
+    std::string targetName = model->getTargetName();
+    if (targetName.empty()) {
+        targetName = "Y";
+    }
+    
+    // Get parameters
+    auto parameters = model->getParameters();
+    
+    // Start with the target variable
+    equation << targetName << " = ";
+    
+    // Add intercept
+    bool firstTerm = true;
+    auto interceptIt = parameters.find("intercept");
+    if (interceptIt != parameters.end()) {
+        equation << interceptIt->second;
+        firstTerm = false;
+    }
+    
+    // Add coefficients with variable names
+    for (const auto& varName : model->getVariableNames()) {
+        auto coefIt = parameters.find(varName);
+        if (coefIt != parameters.end()) {
+            double coef = coefIt->second;
+            if (coef >= 0 && !firstTerm) {
+                equation << " + ";
+            } else if (coef < 0) {
+                equation << " - ";
+                coef = -coef; // Make positive for display
+            }
+            
+            equation << coef << " * " << varName;
+            firstTerm = false;
+        }
+    }
+    
+    return equation.str();
 }
 
 void ResultsView::createScatterPlot() {
@@ -506,32 +629,93 @@ void ResultsView::exportResults() {
         file << "Description: " << model->getDescription() << std::endl;
         file << std::endl;
         
-        // Write parameters
+        // Write parameters with improved formatting
         file << "Model Parameters:" << std::endl;
         file << "----------------" << std::endl;
         auto parameters = model->getParameters();
+        
+        // First write the intercept
+        auto it = parameters.find("intercept");
+        if (it != parameters.end()) {
+            file << "Intercept: " << std::fixed << std::setprecision(6) << it->second << std::endl;
+        }
+        
+        // Then write the coefficients in a more readable way
+        file << std::endl << "Coefficients:" << std::endl;
         for (const auto& param : parameters) {
-            file << param.first << ": " << param.second << std::endl;
+            if (param.first != "intercept") {
+                file << param.first << ": " << std::fixed << std::setprecision(6) << param.second << std::endl;
+            }
         }
         file << std::endl;
+        
+        // Write the regression equation
+        file << "Regression Equation:" << std::endl;
+        file << "-------------------" << std::endl;
+        file << model->getTargetName() << " = ";
+        
+        bool firstTerm = true;
+        it = parameters.find("intercept");
+        if (it != parameters.end()) {
+            file << std::fixed << std::setprecision(4) << it->second;
+            firstTerm = false;
+        }
+        
+        for (const auto& varName : model->getVariableNames()) {
+            auto coefIt = parameters.find(varName);
+            if (coefIt != parameters.end()) {
+                double coef = coefIt->second;
+                if (coef >= 0 && !firstTerm) {
+                    file << " + ";
+                } else if (coef < 0) {
+                    file << " - ";
+                    coef = -coef; // Make positive for display
+                }
+                
+                file << std::fixed << std::setprecision(4) << coef << " * " << varName;
+                firstTerm = false;
+            }
+        }
+        file << std::endl << std::endl;
         
         // Write statistics
         file << "Model Statistics:" << std::endl;
         file << "---------------" << std::endl;
         auto statistics = model->getStatistics();
+        
+        // Format certain statistics nicely
+        auto r2 = statistics.find("r_squared");
+        if (r2 != statistics.end()) {
+            file << "R² (coefficient of determination): " << std::fixed << std::setprecision(4) << r2->second << std::endl;
+        }
+        
+        auto adj_r2 = statistics.find("adjusted_r_squared");
+        if (adj_r2 != statistics.end()) {
+            file << "Adjusted R²: " << std::fixed << std::setprecision(4) << adj_r2->second << std::endl;
+        }
+        
+        auto rmse = statistics.find("rmse");
+        if (rmse != statistics.end()) {
+            file << "RMSE (root mean squared error): " << std::fixed << std::setprecision(4) << rmse->second << std::endl;
+        }
+        
+        // Include other statistics
         for (const auto& stat : statistics) {
-            file << stat.first << ": " << stat.second << std::endl;
+            if (stat.first != "r_squared" && stat.first != "adjusted_r_squared" && stat.first != "rmse") {
+                file << stat.first << ": " << stat.second << std::endl;
+            }
         }
         file << std::endl;
         
         // Write variable information
         file << "Variables:" << std::endl;
         file << "----------" << std::endl;
-        file << "Target Variable: " << targetVariable << std::endl;
+        file << "Target Variable: " << model->getTargetName() << std::endl;
         file << "Input Variables: ";
-        for (size_t i = 0; i < inputVariables.size(); ++i) {
-            file << inputVariables[i];
-            if (i < inputVariables.size() - 1) {
+        const auto& varNames = model->getVariableNames();
+        for (size_t i = 0; i < varNames.size(); ++i) {
+            file << varNames[i];
+            if (i < varNames.size() - 1) {
                 file << ", ";
             }
         }
