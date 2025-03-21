@@ -2,10 +2,12 @@
 #include <FL/Fl.H>
 #include <FL/fl_draw.H>
 #include <sstream>
+#include "util/Logger.h"
 
 HyperparameterSelector::HyperparameterSelector(int x, int y, int w, int h)
     : Fl_Group(x, y, w, h), currentModelType("")
 {
+    LOG_DEBUG("Creating HyperparameterSelector", "HyperparameterSelector");
     begin();
     
     // Set user_data to this, needed for callbacks
@@ -45,44 +47,45 @@ HyperparameterSelector::HyperparameterSelector(int x, int y, int w, int h)
     
     box(FL_FLAT_BOX);
     color(FL_BACKGROUND_COLOR);
+    LOG_DEBUG("HyperparameterSelector initialization complete", "HyperparameterSelector");
 }
 
 HyperparameterSelector::~HyperparameterSelector()
 {
-    // Free allocated parameter name strings in autoToggle widgets
-    for (auto& param : paramWidgets) {
-        if (param.autoToggle && param.autoToggle->user_data()) {
-            free(param.autoToggle->user_data());
-        }
-    }
+    LOG_DEBUG("Destroying HyperparameterSelector", "HyperparameterSelector");
+    
+    // We no longer need to free user_data since we're not using strdup anymore
+    // Parameter names are stored in paramWidgets directly
     
     clearUI();
+    LOG_DEBUG("HyperparameterSelector destroyed", "HyperparameterSelector");
 }
 
 void HyperparameterSelector::setModelType(const std::string& modelType)
 {
+    LOG_DEBUG("Setting model type to: " + modelType, "HyperparameterSelector");
     if (currentModelType != modelType) {
         currentModelType = modelType;
         clearUI();
         buildUIForModelType();
+        LOG_DEBUG("Model type set and UI rebuilt", "HyperparameterSelector");
     }
 }
 
 void HyperparameterSelector::clearUI()
 {
+    LOG_DEBUG("Clearing UI", "HyperparameterSelector");
     parametersGroup->begin();
     
     // Remove all parameter widgets
     for (auto& param : paramWidgets) {
+        LOG_DEBUG("Removing widget for parameter: " + param.name, "HyperparameterSelector");
         if (param.widget) {
             parametersGroup->remove(param.widget);
             delete param.widget;
         }
         if (param.autoToggle) {
-            // Free the parameter name string if it exists
-            if (param.autoToggle->user_data()) {
-                free(param.autoToggle->user_data());
-            }
+            // No need to free user_data anymore
             parametersGroup->remove(param.autoToggle);
             delete param.autoToggle;
         }
@@ -91,10 +94,12 @@ void HyperparameterSelector::clearUI()
     paramWidgets.clear();
     parametersGroup->end();
     parametersGroup->redraw();
+    LOG_DEBUG("UI cleared", "HyperparameterSelector");
 }
 
 void HyperparameterSelector::buildUIForModelType()
 {
+    LOG_DEBUG("Building UI for model type: " + currentModelType, "HyperparameterSelector");
     // Use a persistent string for the title label
     std::string titleStr = "Configure " + currentModelType + " Hyperparameters";
     titleLabel->copy_label(titleStr.c_str());
@@ -114,6 +119,7 @@ void HyperparameterSelector::buildUIForModelType()
     }
     
     redraw();
+    LOG_DEBUG("UI built for model type: " + currentModelType, "HyperparameterSelector");
 }
 
 void HyperparameterSelector::createLinearRegressionUI()
@@ -425,6 +431,7 @@ void HyperparameterSelector::addTextParam(const std::string& name, const std::st
 
 void HyperparameterSelector::addAutoToggle(const std::string& paramName)
 {
+    LOG_DEBUG("Adding auto toggle for parameter: " + paramName, "HyperparameterSelector");
     // Find the parameter widget
     for (auto& param : paramWidgets) {
         if (param.name == paramName && !param.autoToggle) {
@@ -436,12 +443,9 @@ void HyperparameterSelector::addAutoToggle(const std::string& paramName)
             autoToggle->copy_label("Auto");
             autoToggle->callback(autoToggleCallback, this);
             
-            // Store parameter name in a way that won't cause memory corruption
-            // We use a copy of the string to ensure it remains valid
-            char* paramNameCopy = strdup(paramName.c_str());
-            autoToggle->user_data(paramNameCopy);
-            
+            // Store the auto toggle button in the parameter data
             param.autoToggle = autoToggle;
+            LOG_DEBUG("Auto toggle added for parameter: " + paramName, "HyperparameterSelector");
             break;
         }
     }
@@ -449,12 +453,15 @@ void HyperparameterSelector::addAutoToggle(const std::string& paramName)
 
 void HyperparameterSelector::updateParamVisibility(const std::string& paramName, bool autoEnabled)
 {
+    LOG_DEBUG("Updating visibility for parameter: " + paramName + " (autoEnabled=" + (autoEnabled ? "true" : "false") + ")", "HyperparameterSelector");
     for (auto& param : paramWidgets) {
         if (param.name == paramName) {
             if (autoEnabled) {
                 param.widget->deactivate();
+                LOG_DEBUG("Deactivated widget for parameter: " + paramName, "HyperparameterSelector");
             } else {
                 param.widget->activate();
+                LOG_DEBUG("Activated widget for parameter: " + paramName, "HyperparameterSelector");
             }
             break;
         }
@@ -463,9 +470,11 @@ void HyperparameterSelector::updateParamVisibility(const std::string& paramName,
 
 void HyperparameterSelector::handleAutoToggle(const std::string& paramName)
 {
+    LOG_DEBUG("Handling auto toggle for parameter: " + paramName, "HyperparameterSelector");
     for (auto& param : paramWidgets) {
         if (param.name == paramName && param.autoToggle) {
             bool isAuto = (param.autoToggle->value() != 0);
+            LOG_DEBUG("Auto toggle value for " + paramName + ": " + (isAuto ? "ON" : "OFF"), "HyperparameterSelector");
             updateParamVisibility(paramName, isAuto);
             break;
         }
@@ -499,6 +508,7 @@ void HyperparameterSelector::handleBackButtonClick()
 
 std::unordered_map<std::string, std::string> HyperparameterSelector::collectParameters()
 {
+    LOG_DEBUG("Collecting parameters", "HyperparameterSelector");
     std::unordered_map<std::string, std::string> params;
     
     for (const auto& param : paramWidgets) {
@@ -507,50 +517,109 @@ std::unordered_map<std::string, std::string> HyperparameterSelector::collectPara
         // Add parameter with special "auto" value if auto is selected
         if (isAuto) {
             params[param.name] = "auto";
+            LOG_DEBUG("Parameter " + param.name + " = auto", "HyperparameterSelector");
             continue;
         }
         
         // Otherwise get the actual value
-        if (auto slider = dynamic_cast<Fl_Value_Slider*>(param.widget)) {
-            std::ostringstream oss;
-            oss << slider->value();
-            params[param.name] = oss.str();
-        }
-        else if (auto choice = dynamic_cast<Fl_Choice*>(param.widget)) {
-            params[param.name] = choice->text() ? choice->text() : "";
-        }
-        else if (auto check = dynamic_cast<Fl_Check_Button*>(param.widget)) {
-            params[param.name] = check->value() ? "true" : "false";
-        }
-        else if (auto input = dynamic_cast<Fl_Input*>(param.widget)) {
-            params[param.name] = input->value() ? input->value() : "";
+        try {
+            if (auto slider = dynamic_cast<Fl_Value_Slider*>(param.widget)) {
+                std::ostringstream oss;
+                oss << slider->value();
+                params[param.name] = oss.str();
+                LOG_DEBUG("Parameter " + param.name + " = " + params[param.name] + " (slider)", "HyperparameterSelector");
+            }
+            else if (auto choice = dynamic_cast<Fl_Choice*>(param.widget)) {
+                params[param.name] = choice->text() ? choice->text() : "";
+                LOG_DEBUG("Parameter " + param.name + " = " + params[param.name] + " (choice)", "HyperparameterSelector");
+            }
+            else if (auto check = dynamic_cast<Fl_Check_Button*>(param.widget)) {
+                params[param.name] = check->value() ? "true" : "false";
+                LOG_DEBUG("Parameter " + param.name + " = " + params[param.name] + " (check)", "HyperparameterSelector");
+            }
+            else if (auto input = dynamic_cast<Fl_Input*>(param.widget)) {
+                params[param.name] = input->value() ? input->value() : "";
+                LOG_DEBUG("Parameter " + param.name + " = " + params[param.name] + " (input)", "HyperparameterSelector");
+            }
+        } catch (const std::exception& e) {
+            LOG_ERROR("Exception while collecting parameter " + param.name + ": " + e.what(), "HyperparameterSelector");
+        } catch (...) {
+            LOG_ERROR("Unknown exception while collecting parameter " + param.name, "HyperparameterSelector");
         }
     }
     
+    LOG_DEBUG("Parameter collection complete, collected " + std::to_string(params.size()) + " parameters", "HyperparameterSelector");
     return params;
 }
 
 void HyperparameterSelector::nextButtonCallback(Fl_Widget* widget, void* userData)
 {
+    LOG_DEBUG("Next button clicked", "HyperparameterSelector");
     HyperparameterSelector* self = static_cast<HyperparameterSelector*>(userData);
-    self->handleNextButtonClick();
+    if (self) {
+        self->handleNextButtonClick();
+    } else {
+        LOG_ERROR("Next button callback has null self pointer", "HyperparameterSelector");
+    }
 }
 
 void HyperparameterSelector::backButtonCallback(Fl_Widget* widget, void* userData)
 {
+    LOG_DEBUG("Back button clicked", "HyperparameterSelector");
     HyperparameterSelector* self = static_cast<HyperparameterSelector*>(userData);
-    self->handleBackButtonClick();
+    if (self) {
+        self->handleBackButtonClick();
+    } else {
+        LOG_ERROR("Back button callback has null self pointer", "HyperparameterSelector");
+    }
+}
+
+std::string HyperparameterSelector::findParamNameByAutoToggle(Fl_Check_Button* autoToggle)
+{
+    LOG_DEBUG("Finding parameter name for auto toggle button: " + std::to_string(reinterpret_cast<uintptr_t>(autoToggle)), "HyperparameterSelector");
+    for (const auto& param : paramWidgets) {
+        if (param.autoToggle == autoToggle) {
+            LOG_DEBUG("Found parameter name: " + param.name, "HyperparameterSelector");
+            return param.name;
+        }
+    }
+    LOG_ERROR("Parameter name not found for auto toggle button", "HyperparameterSelector");
+    return "";
 }
 
 void HyperparameterSelector::autoToggleCallback(Fl_Widget* widget, void* userData)
 {
-    // The userData here is the HyperparameterSelector instance
-    HyperparameterSelector* self = static_cast<HyperparameterSelector*>(userData);
-    Fl_Check_Button* checkButton = static_cast<Fl_Check_Button*>(widget);
+    LOG_DEBUG("Auto toggle button clicked", "HyperparameterSelector");
     
-    // Extract the parameter name from checkButton's user_data
-    if (self && checkButton && checkButton->user_data()) {
-        const char* paramName = static_cast<const char*>(checkButton->user_data());
-        self->handleAutoToggle(paramName);
+    try {
+        // Cast widgets appropriately
+        HyperparameterSelector* self = static_cast<HyperparameterSelector*>(userData);
+        Fl_Check_Button* checkButton = static_cast<Fl_Check_Button*>(widget);
+        
+        if (!self) {
+            LOG_ERROR("Auto toggle callback has null self pointer", "HyperparameterSelector");
+            return;
+        }
+        
+        if (!checkButton) {
+            LOG_ERROR("Auto toggle callback has null check button pointer", "HyperparameterSelector");
+            return;
+        }
+        
+        LOG_DEBUG("Auto toggle button address: " + std::to_string(reinterpret_cast<uintptr_t>(checkButton)), "HyperparameterSelector");
+        
+        // Find the parameter name associated with this auto toggle button
+        std::string paramName = self->findParamNameByAutoToggle(checkButton);
+        
+        if (!paramName.empty()) {
+            LOG_DEBUG("Handling auto toggle for parameter: " + paramName, "HyperparameterSelector");
+            self->handleAutoToggle(paramName);
+        } else {
+            LOG_ERROR("Could not find parameter name for auto toggle button", "HyperparameterSelector");
+        }
+    } catch (const std::exception& e) {
+        LOG_ERROR("Exception in autoToggleCallback: " + std::string(e.what()), "HyperparameterSelector");
+    } catch (...) {
+        LOG_ERROR("Unknown exception in autoToggleCallback", "HyperparameterSelector");
     }
 } 

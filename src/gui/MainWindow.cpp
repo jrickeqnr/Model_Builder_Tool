@@ -6,6 +6,7 @@
 #include <FL/fl_ask.H>
 #include "models/LinearRegression.h"
 #include "data/CSVReader.h"
+#include "util/Logger.h"
 
 // Define the menu items
 static Fl_Menu_Item menuItems[] = {
@@ -22,6 +23,8 @@ static Fl_Menu_Item menuItems[] = {
 MainWindow::MainWindow(int width, int height, const char* title)
     : Fl_Window(width, height, title), currentState(State::FileSelection)
 {
+    LOG_INFO("Creating MainWindow", "MainWindow");
+    
     // Set window properties
     size_range(800, 600);
     
@@ -49,11 +52,13 @@ MainWindow::MainWindow(int width, int height, const char* title)
     int panelW = width;
     int panelH = height - 100;
     
+    LOG_INFO("Creating FileSelector", "MainWindow");
     fileSelector = new FileSelector(panelX, panelY, panelW, panelH);
     fileSelector->setFileSelectedCallback([this](const std::string& filePath) {
         this->handleFileSelected(filePath);
     });
     
+    LOG_INFO("Creating ModelSelector", "MainWindow");
     modelSelector = new ModelSelector(panelX, panelY, panelW, panelH);
     modelSelector->setModelSelectedCallback([this](const std::string& modelType) {
         this->handleModelSelected(modelType);
@@ -62,6 +67,7 @@ MainWindow::MainWindow(int width, int height, const char* title)
         this->handleBackButton();
     });
     
+    LOG_INFO("Creating HyperparameterSelector", "MainWindow");
     hyperparameterSelector = new HyperparameterSelector(panelX, panelY, panelW, panelH);
     hyperparameterSelector->setHyperparametersSelectedCallback(
         [this](const std::unordered_map<std::string, std::string>& hyperparams) {
@@ -72,6 +78,7 @@ MainWindow::MainWindow(int width, int height, const char* title)
         this->handleBackButton();
     });
     
+    LOG_INFO("Creating VariableSelector", "MainWindow");
     variableSelector = new VariableSelector(panelX, panelY, panelW, panelH);
     variableSelector->setVariablesSelectedCallback(
         [this](const std::vector<std::string>& inputVars, const std::string& targetVar) {
@@ -82,6 +89,7 @@ MainWindow::MainWindow(int width, int height, const char* title)
         this->handleBackButton();
     });
     
+    LOG_INFO("Creating ResultsView", "MainWindow");
     resultsView = new ResultsView(panelX, panelY, panelW, panelH);
     resultsView->setBackButtonCallback([this]() {
         this->handleBackButton();
@@ -103,19 +111,23 @@ MainWindow::MainWindow(int width, int height, const char* title)
     resizable(this);
     
     end();
+    LOG_INFO("MainWindow created", "MainWindow");
 }
 
 MainWindow::~MainWindow() {
+    LOG_INFO("Destroying MainWindow", "MainWindow");
     // Clean up resources
 }
 
 void MainWindow::handleFileSelected(const std::string& filePath) {
+    LOG_INFO("File selected: " + filePath, "MainWindow");
     currentFilePath = filePath;
     statusBar->label("Loading CSV file...");
     
     try {
         // Read the CSV file
         CSVReader reader;
+        LOG_INFO("Reading CSV file", "MainWindow");
         dataFrame = std::make_shared<DataFrame>(reader.readCSV(filePath));
         
         // Update status
@@ -123,25 +135,39 @@ void MainWindow::handleFileSelected(const std::string& filePath) {
         snprintf(statusMsg, sizeof(statusMsg), "CSV file loaded successfully: %zu rows, %zu columns", 
                 dataFrame->rowCount(), dataFrame->columnCount());
         statusBar->label(statusMsg);
+        LOG_INFO(statusMsg, "MainWindow");
         
         // Move to next step
         currentState = State::ModelSelection;
         updateUI();
     } catch (const std::exception& e) {
+        LOG_ERROR("Failed to load CSV file: " + std::string(e.what()), "MainWindow");
         fl_alert("Failed to load CSV file: %s", e.what());
         statusBar->label("Failed to load CSV file");
     }
 }
 
 void MainWindow::handleModelSelected(const std::string& modelType) {
+    LOG_INFO("Model selected: " + modelType, "MainWindow");
     currentModelType = modelType;
     
     // Move to hyperparameter selection for models that have hyperparameters
     if (modelType != "Linear Regression") {
+        LOG_INFO("Moving to hyperparameter selection", "MainWindow");
         currentState = State::HyperparameterSelection;
-        hyperparameterSelector->setModelType(modelType);
+        
+        try {
+            LOG_INFO("Setting model type on hyperparameter selector: " + modelType, "MainWindow");
+            hyperparameterSelector->setModelType(modelType);
+            LOG_INFO("Model type set successfully", "MainWindow");
+        } catch (const std::exception& e) {
+            LOG_ERROR("Exception when setting model type: " + std::string(e.what()), "MainWindow");
+        } catch (...) {
+            LOG_ERROR("Unknown exception when setting model type", "MainWindow");
+        }
     } else {
         // Linear Regression has no hyperparameters, skip to variable selection
+        LOG_INFO("Skipping hyperparameter selection for Linear Regression", "MainWindow");
         currentState = State::VariableSelection;
     }
     
@@ -149,10 +175,16 @@ void MainWindow::handleModelSelected(const std::string& modelType) {
 }
 
 void MainWindow::handleHyperparametersSelected(const std::unordered_map<std::string, std::string>& hyperparams) {
+    LOG_INFO("Hyperparameters selected for model: " + currentModelType, "MainWindow");
+    for (const auto& param : hyperparams) {
+        LOG_INFO("  " + param.first + " = " + param.second, "MainWindow");
+    }
+    
     currentHyperparameters = hyperparams;
     
     // Move to variable selection
     currentState = State::VariableSelection;
+    LOG_INFO("Moving to variable selection", "MainWindow");
     updateUI();
 }
 
@@ -267,6 +299,8 @@ void MainWindow::handleStartOver() {
 }
 
 void MainWindow::updateUI() {
+    LOG_INFO("Updating UI for state: " + std::to_string(static_cast<int>(currentState)), "MainWindow");
+    
     // Hide all panels
     fileSelector->hide();
     modelSelector->hide();
@@ -277,24 +311,28 @@ void MainWindow::updateUI() {
     // Show the panel for the current state
     switch (currentState) {
         case State::FileSelection:
+            LOG_INFO("Showing FileSelector", "MainWindow");
             headerLabel->label("Step 1: Select CSV File");
             fileSelector->show();
             currentPanel = fileSelector;
             break;
             
         case State::ModelSelection:
+            LOG_INFO("Showing ModelSelector", "MainWindow");
             headerLabel->label("Step 2: Select Model Type");
             modelSelector->show();
             currentPanel = modelSelector;
             break;
             
         case State::HyperparameterSelection:
+            LOG_INFO("Showing HyperparameterSelector", "MainWindow");
             headerLabel->label("Step 3: Configure Hyperparameters");
             hyperparameterSelector->show();
             currentPanel = hyperparameterSelector;
             break;
             
         case State::VariableSelection:
+            LOG_INFO("Showing VariableSelector", "MainWindow");
             if (currentModelType != "Linear Regression") {
                 headerLabel->label("Step 4: Select Variables");
             } else {
@@ -308,6 +346,7 @@ void MainWindow::updateUI() {
             break;
             
         case State::Results:
+            LOG_INFO("Showing ResultsView", "MainWindow");
             headerLabel->label("Results");
             resultsView->show();
             currentPanel = resultsView;
@@ -316,67 +355,96 @@ void MainWindow::updateUI() {
     
     // Redraw the window
     redraw();
+    LOG_INFO("UI updated", "MainWindow");
 }
 
 std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
-    if (modelType == "Linear Regression") {
-        return std::make_shared<LinearRegression>();
-    }
-    else if (modelType == "ElasticNet") {
-        // In a real implementation, we would create an ElasticNet model class
-        // and pass the hyperparameters to the constructor
-        // For now, we'll return a LinearRegression as a placeholder
-        auto linearModel = std::make_shared<LinearRegression>();
-        // In a real implementation, we would set the hyperparameters here
-        return linearModel;
-    }
-    else if (modelType == "XGBoost") {
-        // In a real implementation, we would create an XGBoost model class
-        // and pass the hyperparameters to the constructor
-        // For now, we'll return a LinearRegression as a placeholder
-        auto linearModel = std::make_shared<LinearRegression>();
-        // In a real implementation, we would set the hyperparameters here
-        return linearModel;
-    }
-    else if (modelType == "Random Forest") {
-        // In a real implementation, we would create a RandomForest model class
-        // and pass the hyperparameters to the constructor
-        // For now, we'll return a LinearRegression as a placeholder
-        auto linearModel = std::make_shared<LinearRegression>();
-        // In a real implementation, we would set the hyperparameters here
-        return linearModel;
-    }
-    else if (modelType == "Neural Network") {
-        // In a real implementation, we would create a NeuralNetwork model class
-        // and pass the hyperparameters to the constructor
-        // For now, we'll return a LinearRegression as a placeholder
-        auto linearModel = std::make_shared<LinearRegression>();
-        // In a real implementation, we would set the hyperparameters here
-        return linearModel;
-    }
-    else if (modelType == "Gradient Boosting") {
-        // In a real implementation, we would create a GradientBoosting model class
-        // and pass the hyperparameters to the constructor
-        // For now, we'll return a LinearRegression as a placeholder
-        auto linearModel = std::make_shared<LinearRegression>();
-        // In a real implementation, we would set the hyperparameters here
-        return linearModel;
+    LOG_INFO("Creating model of type: " + modelType, "MainWindow");
+    
+    std::shared_ptr<Model> result = nullptr;
+    
+    try {
+        if (modelType == "Linear Regression") {
+            result = std::make_shared<LinearRegression>();
+        }
+        else if (modelType == "ElasticNet") {
+            // In a real implementation, we would create an ElasticNet model class
+            // and pass the hyperparameters to the constructor
+            // For now, we'll return a LinearRegression as a placeholder
+            auto linearModel = std::make_shared<LinearRegression>();
+            // In a real implementation, we would set the hyperparameters here
+            result = linearModel;
+        }
+        else if (modelType == "XGBoost") {
+            // In a real implementation, we would create an XGBoost model class
+            // and pass the hyperparameters to the constructor
+            // For now, we'll return a LinearRegression as a placeholder
+            auto linearModel = std::make_shared<LinearRegression>();
+            // In a real implementation, we would set the hyperparameters here
+            result = linearModel;
+        }
+        else if (modelType == "Random Forest") {
+            // In a real implementation, we would create a RandomForest model class
+            // and pass the hyperparameters to the constructor
+            // For now, we'll return a LinearRegression as a placeholder
+            auto linearModel = std::make_shared<LinearRegression>();
+            // In a real implementation, we would set the hyperparameters here
+            result = linearModel;
+        }
+        else if (modelType == "Neural Network") {
+            // In a real implementation, we would create a NeuralNetwork model class
+            // and pass the hyperparameters to the constructor
+            // For now, we'll return a LinearRegression as a placeholder
+            auto linearModel = std::make_shared<LinearRegression>();
+            // In a real implementation, we would set the hyperparameters here
+            result = linearModel;
+        }
+        else if (modelType == "Gradient Boosting") {
+            // In a real implementation, we would create a GradientBoosting model class
+            // and pass the hyperparameters to the constructor
+            // For now, we'll return a LinearRegression as a placeholder
+            auto linearModel = std::make_shared<LinearRegression>();
+            // In a real implementation, we would set the hyperparameters here
+            result = linearModel;
+        }
+        
+        if (result) {
+            LOG_INFO("Model created successfully", "MainWindow");
+        } else {
+            LOG_ERROR("Unknown model type: " + modelType, "MainWindow");
+        }
+    } catch (const std::exception& e) {
+        LOG_ERROR("Exception creating model: " + std::string(e.what()), "MainWindow");
+    } catch (...) {
+        LOG_ERROR("Unknown exception creating model", "MainWindow");
     }
     
-    // Unknown model type
-    return nullptr;
+    return result;
 }
 
 void MainWindow::menuCallback(Fl_Widget* widget, void* userData) {
-    MainWindow* window = static_cast<MainWindow*>(widget->window());
-    const char* action = static_cast<const char*>(userData);
-    
-    if (strcmp(action, "new") == 0) {
-        window->handleStartOver();
-    } else if (strcmp(action, "exit") == 0) {
-        window->hide();
-    } else if (strcmp(action, "about") == 0) {
-        fl_message("Linear Regression Tool v1.0.0\n\n"
-                  "A simple tool for performing linear regression analysis on CSV data.");
+    try {
+        MainWindow* window = static_cast<MainWindow*>(widget->window());
+        const char* action = static_cast<const char*>(userData);
+        
+        if (!window) {
+            LOG_ERROR("Null window pointer in menu callback", "MainWindow");
+            return;
+        }
+        
+        LOG_INFO("Menu action: " + std::string(action), "MainWindow");
+        
+        if (strcmp(action, "new") == 0) {
+            window->handleStartOver();
+        } else if (strcmp(action, "exit") == 0) {
+            window->hide();
+        } else if (strcmp(action, "about") == 0) {
+            fl_message("Linear Regression Tool v1.0.0\n\n"
+                      "A simple tool for performing linear regression analysis on CSV data.");
+        }
+    } catch (const std::exception& e) {
+        LOG_ERROR("Exception in menu callback: " + std::string(e.what()), "MainWindow");
+    } catch (...) {
+        LOG_ERROR("Unknown exception in menu callback", "MainWindow");
     }
 }

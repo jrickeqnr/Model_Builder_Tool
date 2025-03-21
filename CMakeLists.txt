@@ -46,6 +46,7 @@ set(SOURCES
     src/data/CSVReader.cpp
     src/data/DataFrame.cpp
     # The PlottingUtility.h is a header-only file, so it's not included here
+    # The Logger.h is a header-only file, so it's not included here
 )
 
 # Create executable

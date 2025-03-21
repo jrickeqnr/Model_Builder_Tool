@@ -71,9 +71,20 @@ private:
     void handleBackButtonClick();
     void handleAutoToggle(const std::string& paramName);
     
+    // Helper struct to store parameter information
+    struct ParamWidgets {
+        std::string name;
+        Fl_Widget* widget = nullptr;
+        Fl_Check_Button* autoToggle = nullptr;
+    };
+    
+    // Static callbacks
     static void nextButtonCallback(Fl_Widget* widget, void* userData);
     static void backButtonCallback(Fl_Widget* widget, void* userData);
     static void autoToggleCallback(Fl_Widget* widget, void* userData);
+    
+    // Helper method to find parameter by auto toggle button pointer
+    std::string findParamNameByAutoToggle(Fl_Check_Button* autoToggle);
     
     std::string currentModelType;
     
@@ -85,12 +96,6 @@ private:
     Fl_Button* backButton;
     
     // Store parameter widgets by name
-    struct ParamWidgets {
-        std::string name;
-        Fl_Widget* widget = nullptr;
-        Fl_Check_Button* autoToggle = nullptr;
-    };
-    
     std::vector<ParamWidgets> paramWidgets;
     
     // Callback functions
