@@ -188,6 +188,7 @@ private:
 
     // UI Elements
     Fl_Box* modelTitleLabel;
+    Fl_Box* modelSubtitleLabel;
     Fl_Box* equationDisplay;
     Fl_Group* parametersGroup;
     Fl_Group* statisticsGroup;
@@ -352,6 +353,7 @@ private:
     static void resizeTimeoutCallback(void* v);
     void regeneratePlot();
     bool createTempDataFile(const std::string& data, const std::string& filename);
+    bool executePythonScript(const std::string& scriptPath, const std::string& tempDataPath, const std::string& tempImagePath);
 
     enum class PlotType {
         None,

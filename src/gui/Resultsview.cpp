@@ -150,6 +150,76 @@ void PlotWidget::regeneratePlot() {
     }
 }
 
+bool PlotWidget::createTempDataFile(const std::string& data, const std::string& filename)
+{
+    try {
+        std::ofstream file(filename);
+        if (!file.is_open()) {
+            log_debug("ERROR: Failed to create temporary file: " + filename);
+            return false;
+        }
+        
+        file << data;
+        file.close();
+        return true;
+    }
+    catch (const std::exception& e) {
+        log_debug("ERROR: Exception while creating temporary file: " + std::string(e.what()));
+        return false;
+    }
+}
+
+bool PlotWidget::executePythonScript(const std::string& scriptPath, const std::string& tempDataPath, const std::string& tempImagePath)
+{
+    try {
+        // Check if Python is available
+        int pythonCheck = system("python --version > nul 2>&1");
+        if (pythonCheck != 0) {
+            log_debug("ERROR: Python is not available");
+            fl_alert("Python is not available. Please install Python and required libraries (matplotlib, pandas, numpy).");
+            return false;
+        }
+
+        // Execute the Python script
+        std::string command = "python \"" + scriptPath + "\" 2>&1";
+        FILE* pipe = _popen(command.c_str(), "r");
+        if (!pipe) {
+            log_debug("ERROR: Failed to execute Python script");
+            return false;
+        }
+
+        // Read and log the output
+        char buffer[128];
+        std::string result = "";
+        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+            result += buffer;
+        }
+        log_debug("Python script output:\n" + result);
+
+        // Close the pipe
+        int status = _pclose(pipe);
+        if (status != 0) {
+            log_debug("ERROR: Python script failed with status " + std::to_string(status));
+            fl_alert("Failed to generate plot. Check if Python and required libraries are installed.");
+            return false;
+        }
+
+        // Check if the output file was created
+        std::ifstream checkFile(tempImagePath);
+        if (!checkFile.good()) {
+            log_debug("ERROR: Plot image file was not created: " + tempImagePath);
+            return false;
+        }
+        checkFile.close();
+
+        return true;
+    }
+    catch (const std::exception& e) {
+        log_debug("ERROR: Exception while executing Python script: " + std::string(e.what()));
+        return false;
+    }
+}
+
 void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
                                  const std::vector<double>& predictedValues,
                                  const std::string& xLabel,
@@ -170,14 +240,16 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
     log_debug("Creating scatter plot - Data file: " + tempDataPath + ", Image file: " + tempImagePath);
 
     // Write data to temporary file
-    std::ofstream dataFile(tempDataPath);
-    if (!dataFile.is_open()) {
-        log_debug("ERROR: Failed to create temporary data file: " + tempDataPath);
-        fl_alert("Failed to create temporary data file: %s", tempDataPath.c_str());
+    if (!createTempDataFile("actual,predicted\n", tempDataPath)) {
         return;
     }
 
-    dataFile << "actual,predicted\n";
+    std::ofstream dataFile(tempDataPath, std::ios::app);
+    if (!dataFile.is_open()) {
+        log_debug("ERROR: Failed to append to temporary data file: " + tempDataPath);
+        return;
+    }
+
     for (size_t i = 0; i < std::min(actualValues.size(), predictedValues.size()); ++i) {
         dataFile << actualValues[i] << "," << predictedValues[i] << "\n";
     }
@@ -188,128 +260,94 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
     double figHeight = h() / 100.0;
 
     // Create plotting script
-    std::ofstream scriptFile(tempScriptPath);
-    if (!scriptFile.is_open()) {
-        log_debug("ERROR: Failed to create temporary script file: " + tempScriptPath);
-        fl_alert("Failed to create temporary script file: %s", tempScriptPath.c_str());
+    std::stringstream scriptContent;
+    scriptContent << "import matplotlib\n"
+                 << "matplotlib.use('Agg')\n"
+                 << "import matplotlib.pyplot as plt\n"
+                 << "import pandas as pd\n"
+                 << "import numpy as np\n\n"
+                 << "try:\n"
+                 << "    # Read data\n"
+                 << "    data = pd.read_csv('" << tempDataPath << "')\n"
+                 << "    actual = data['actual']\n"
+                 << "    predicted = data['predicted']\n\n"
+                 << "    # Create plot\n"
+                 << "    plt.figure(figsize=(" << figWidth << ", " << figHeight << "), dpi=100)\n"
+                 << "    plt.scatter(actual, predicted, alpha=0.7, s=30)\n\n"
+                 << "    # Add perfect prediction line\n"
+                 << "    min_val = min(actual.min(), predicted.min())\n"
+                 << "    max_val = max(actual.max(), predicted.max())\n"
+                 << "    plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=1)\n\n"
+                 << "    # Set labels and title\n"
+                 << "    plt.xlabel('" << xLabel << "', fontsize=8)\n"
+                 << "    plt.ylabel('" << yLabel << "', fontsize=8)\n"
+                 << "    plt.title('" << title << "', fontsize=10)\n"
+                 << "    plt.xticks(fontsize=8)\n"
+                 << "    plt.yticks(fontsize=8)\n"
+                 << "    plt.grid(True, linestyle='--', alpha=0.7)\n\n"
+                 << "    # Save plot\n"
+                 << "    plt.tight_layout()\n"
+                 << "    plt.savefig('" << tempImagePath << "', format='png', bbox_inches='tight')\n"
+                 << "    plt.close()\n"
+                 << "except Exception as e:\n"
+                 << "    print('Error in Python script:', str(e))\n"
+                 << "    exit(1)\n";
+
+    if (!createTempDataFile(scriptContent.str(), tempScriptPath)) {
         return;
     }
 
-    scriptFile << "import matplotlib.pyplot as plt\n";
-    scriptFile << "import pandas as pd\n";
-    scriptFile << "import numpy as np\n\n";
-    scriptFile << "print('Python script starting...')\n";
-
-    // Read data
-    scriptFile << "# Read data\n";
-    scriptFile << "data = pd.read_csv('" << tempDataPath << "')\n";
-    scriptFile << "print('Data loaded:', len(data), 'rows')\n";
-    scriptFile << "actual = data['actual']\n";
-    scriptFile << "predicted = data['predicted']\n";
-    scriptFile << "print('Data ranges - Actual:', actual.min(), 'to', actual.max())\n";
-    scriptFile << "print('Data ranges - Predicted:', predicted.min(), 'to', predicted.max())\n\n";
-
-    // Create plot with dimensions based on widget size
-    scriptFile << "# Create plot\n";
-    scriptFile << "plt.figure(figsize=(" << figWidth << ", " << figHeight << "), dpi=100)\n";
-    scriptFile << "plt.scatter(actual, predicted, alpha=0.7, s=30)\n";
-    scriptFile << "print('Scatter plot created')\n\n";
-
-    // Add perfect prediction line
-    scriptFile << "# Add perfect prediction line\n";
-    scriptFile << "min_val = min(actual.min(), predicted.min())\n";
-    scriptFile << "max_val = max(actual.max(), predicted.max())\n";
-    scriptFile << "plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=1)\n\n";
-
-    // Set labels and title with adjusted font sizes
-    scriptFile << "# Set labels and title\n";
-    scriptFile << "plt.xlabel('" << xLabel << "', fontsize=8)\n";
-    scriptFile << "plt.ylabel('" << yLabel << "', fontsize=8)\n";
-    scriptFile << "plt.title('" << title << "', fontsize=10)\n";
-    scriptFile << "plt.xticks(fontsize=8)\n";
-    scriptFile << "plt.yticks(fontsize=8)\n";
-    scriptFile << "plt.grid(True, linestyle='--', alpha=0.7)\n\n";
-
-    // Save plot
-    scriptFile << "# Save plot\n";
-    scriptFile << "plt.tight_layout()\n";
-    scriptFile << "plt.savefig('" << tempImagePath << "', format='png', bbox_inches='tight')\n";
-    scriptFile << "print('Plot saved as:', '" << tempImagePath << "')\n";
-    scriptFile << "plt.close()\n";
-
-    scriptFile.close();
-
-    // Execute Python script
-    std::string command = "python " + tempScriptPath + " 2>&1";
-    FILE* pipe = _popen(command.c_str(), "r");
-    if (!pipe) {
-        log_debug("ERROR: Failed to execute Python script");
-        fl_alert("Failed to execute Python script");
-        return;
-    }
-
-    // Read and log the output
-    char buffer[128];
-    std::string result = "";
-    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-        result += buffer;
-    }
-    log_debug("Python script output:\n" + result);
-
-    // Close the pipe
-    int status = _pclose(pipe);
-    if (status != 0) {
-        log_debug("ERROR: Python script failed with status " + std::to_string(status));
-        fl_alert("Failed to generate plot. Check if Python and matplotlib are installed.");
+    // Execute the Python script
+    if (!executePythonScript(tempScriptPath, tempDataPath, tempImagePath)) {
         return;
     }
 
     // Load the generated image
-    Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
-    if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-        // Store the image dimensions
-        plotImageWidth = pngImage->w();
-        plotImageHeight = pngImage->h();
+    std::unique_ptr<Fl_PNG_Image> pngImage(new Fl_PNG_Image(tempImagePath.c_str()));
+    if (!pngImage || pngImage->w() <= 0 || pngImage->h() <= 0) {
+        log_debug("ERROR: Failed to load the generated plot image: " + tempImagePath);
+        return;
+    }
 
-        // Create a new buffer for the image data
-        if (plotImageData) {
-            delete[] plotImageData;
-        }
-        plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
+    // Store the image dimensions
+    plotImageWidth = pngImage->w();
+    plotImageHeight = pngImage->h();
 
-        // Copy the image data
-        const char* imageData = (const char*)pngImage->data()[0];
-        int depth = pngImage->d();
+    // Create a new buffer for the image data
+    if (plotImageData) {
+        delete[] plotImageData;
+    }
+    plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
 
-        for (int y = 0; y < plotImageHeight; y++) {
-            for (int x = 0; x < plotImageWidth; x++) {
-                int srcIdx = (y * plotImageWidth + x) * depth;
-                int dstIdx = (y * plotImageWidth + x) * 3;
+    // Copy the image data
+    const char* imageData = (const char*)pngImage->data()[0];
+    int depth = pngImage->d();
 
-                if (depth >= 3) {
-                    // RGB data
-                    plotImageData[dstIdx] = imageData[srcIdx];     // R
-                    plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
-                    plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
-                } else if (depth == 1) {
-                    // Grayscale
-                    plotImageData[dstIdx] = 
-                    plotImageData[dstIdx+1] = 
-                    plotImageData[dstIdx+2] = imageData[srcIdx];
-                }
+    for (int y = 0; y < plotImageHeight; y++) {
+        for (int x = 0; x < plotImageWidth; x++) {
+            int srcIdx = (y * plotImageWidth + x) * depth;
+            int dstIdx = (y * plotImageWidth + x) * 3;
+
+            if (depth >= 3) {
+                // RGB data
+                plotImageData[dstIdx] = imageData[srcIdx];     // R
+                plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
+                plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
+            } else if (depth == 1) {
+                // Grayscale
+                plotImageData[dstIdx] = 
+                plotImageData[dstIdx+1] = 
+                plotImageData[dstIdx+2] = imageData[srcIdx];
             }
         }
-
-        // Clean up the PNG image
-        delete pngImage;
-
-        // Redraw the widget
-        redraw();
-        log_debug("Plot widget redrawn");
-    } else {
-        log_debug("ERROR: Failed to load the generated plot image: " + tempImagePath);
-        fl_alert("Failed to load the generated plot image: %s", tempImagePath.c_str());
     }
+
+    // Clean up temporary files
+    std::remove(tempScriptPath.c_str());
+    std::remove(tempDataPath.c_str());
+
+    // Redraw the widget
+    redraw();
 }
 
 void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
@@ -552,18 +590,6 @@ void PlotWidget::createImportancePlot(const std::unordered_map<std::string, doub
     } else {
         fl_alert("Failed to load the generated plot image: %s", tempImagePath.c_str());
     }
-}
-
-bool PlotWidget::createTempDataFile(const std::string& data, const std::string& filename)
-{
-    std::ofstream file(filename);
-    if (!file.is_open()) {
-        return false;
-    }
-    
-    file << data;
-    file.close();
-    return true;
 }
 
 bool PlotWidget::savePlot(const std::string& filename) {
@@ -829,14 +855,20 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     modelTitleLabel->labelsize(18);
     modelTitleLabel->labelfont(FL_BOLD);
     
+    // Create subtitle label
+    modelSubtitleLabel = new Fl_Box(x + margin, y + margin + headerHeight, w - 2*margin, 25, "");
+    modelSubtitleLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    modelSubtitleLabel->labelsize(14);
+    modelSubtitleLabel->labelfont(FL_ITALIC);
+    
     // Create equation display box
-    Fl_Box* equationLabel = new Fl_Box(x + margin, y + margin + headerHeight + 5, 
+    Fl_Box* equationLabel = new Fl_Box(x + margin, y + margin + headerHeight + 30, 
                                       w - 2*margin, equationHeight, "Regression Equation:");
     equationLabel->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
     equationLabel->labelsize(14);
     equationLabel->labelfont(FL_BOLD);
     
-    equationDisplay = new Fl_Box(x + margin + 20, y + margin + headerHeight + 25, 
+    equationDisplay = new Fl_Box(x + margin + 20, y + margin + headerHeight + 55, 
                                 w - 2*margin - 40, equationHeight - 20, "");
     equationDisplay->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
     equationDisplay->labelsize(14);
@@ -857,8 +889,8 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     parametersLabel->labelsize(14);
     parametersLabel->labelfont(FL_BOLD);
     
-    DataTable* paramsTable = new DataTable(x + margin + 10, contentY + 50, 
-                                         tableWidth - 20, contentHeight/2 - 60);
+    parametersTable = new DataTable(x + margin + 10, contentY + 50, 
+                                  tableWidth - 20, contentHeight/2 - 60);
     
     parametersGroup->end();
     
@@ -872,8 +904,8 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     statisticsLabel->labelsize(14);
     statisticsLabel->labelfont(FL_BOLD);
     
-    DataTable* statsTable = new DataTable(x + margin + 10, contentY + contentHeight/2 + 60, 
-                                        tableWidth - 20, contentHeight/2 - 70);
+    statisticsTable = new DataTable(x + margin + 10, contentY + contentHeight/2 + 60, 
+                                  tableWidth - 20, contentHeight/2 - 70);
     
     statisticsGroup->end();
     
@@ -915,6 +947,9 @@ void ResultsView::setData(std::shared_ptr<DataFrame> dataFrame,
 
 void ResultsView::setModelType(const std::string& modelType) {
     this->modelType = modelType;
+    if (modelSubtitleLabel) {
+        modelSubtitleLabel->copy_label(("Model Type: " + modelType).c_str());
+    }
 }
 
 void ResultsView::setHyperparameters(const std::unordered_map<std::string, std::string>& hyperparams) {
@@ -944,23 +979,7 @@ void ResultsView::updateResults() {
 }
 
 void ResultsView::updateParametersDisplay() {
-    if (!model) {
-        return;
-    }
-    
-    // Get parameters table
-    Fl_Group* group = parametersGroup;
-    DataTable* table = nullptr;
-    
-    // Find the DataTable in the group
-    for (int i = 0; i < group->children(); i++) {
-        if (dynamic_cast<DataTable*>(group->child(i))) {
-            table = dynamic_cast<DataTable*>(group->child(i));
-            break;
-        }
-    }
-    
-    if (!table) {
+    if (!model || !parametersTable) {
         return;
     }
     
@@ -985,27 +1004,11 @@ void ResultsView::updateParametersDisplay() {
     }
     
     // Update table with ordered parameter values
-    table->setData(orderedParams);
+    parametersTable->setData(orderedParams);
 }
 
 void ResultsView::updateStatisticsDisplay() {
-    if (!model) {
-        return;
-    }
-    
-    // Get statistics table
-    Fl_Group* group = statisticsGroup;
-    DataTable* table = nullptr;
-    
-    // Find the DataTable in the group
-    for (int i = 0; i < group->children(); i++) {
-        if (dynamic_cast<DataTable*>(group->child(i))) {
-            table = dynamic_cast<DataTable*>(group->child(i));
-            break;
-        }
-    }
-    
-    if (!table) {
+    if (!model || !statisticsTable) {
         return;
     }
     
@@ -1046,7 +1049,7 @@ void ResultsView::updateStatisticsDisplay() {
     }
     
     // Update table with formatted statistics
-    table->setData(formattedStats);
+    statisticsTable->setData(formattedStats);
 }
 
 std::string ResultsView::getEquationString() const {
@@ -1296,10 +1299,10 @@ void ResultsView::updateLinearRegressionDisplay() {
     createPlots();
     
     // Additional model-specific displays
-    if (model) {
+    if (model && equationDisplay) {  // Add null check for equationDisplay
         // Add equation display
         std::string equation = getEquationString();
-        equationBox->copy_label(equation.c_str());
+        equationDisplay->copy_label(equation.c_str());
     }
 }
 
