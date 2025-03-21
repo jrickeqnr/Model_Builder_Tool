@@ -18,6 +18,56 @@
 class PlotWidget;
 
 /**
+ * @brief Class for managing multiple plots with navigation
+ */
+class PlotNavigator : public Fl_Group {
+public:
+    PlotNavigator(int x, int y, int w, int h);
+    ~PlotNavigator();
+
+    /**
+     * @brief Create a new plot
+     * 
+     * @param data DataFrame containing the data
+     * @param model Model used for predictions
+     * @param plotType Type of plot to create
+     * @param title Plot title
+     */
+    void createPlot(const std::shared_ptr<DataFrame>& data,
+                   const std::shared_ptr<Model>& model,
+                   const std::string& plotType,
+                   const std::string& title);
+
+    /**
+     * @brief Navigate to the next plot
+     */
+    void nextPlot();
+
+    /**
+     * @brief Navigate to the previous plot
+     */
+    void prevPlot();
+
+    /**
+     * @brief Clear all plots
+     */
+    void clearPlots();
+
+private:
+    std::vector<PlotWidget*> plots;
+    size_t currentPlotIndex;
+    Fl_Button* prevButton;
+    Fl_Button* nextButton;
+    Fl_Box* plotLabel;
+
+    static void prevButtonCallback(Fl_Widget* w, void* v);
+    static void nextButtonCallback(Fl_Widget* w, void* v);
+
+    void updateVisibility();
+    void updateNavigationButtons();
+};
+
+/**
  * @brief Widget for displaying regression results
  * 
  * This widget provides UI for displaying the results of a regression analysis,
@@ -75,7 +125,7 @@ private:
     Fl_Box* equationDisplay;
     Fl_Group* parametersGroup;
     Fl_Group* statisticsGroup;
-    PlotWidget* plotWidget;
+    PlotNavigator* plotNavigator;
     Fl_Button* backButton;
     Fl_Button* exportButton;
     
@@ -106,9 +156,9 @@ private:
     void updateStatisticsDisplay();
 
     /**
-     * @brief Create scatter plot of actual vs predicted values
+     * @brief Create all plots for the current model
      */
-    void createScatterPlot();
+    void createPlots();
 
     /**
      * @brief Export results to a file
@@ -136,10 +186,30 @@ public:
      * @param title Title of the plot
      */
     void createScatterPlot(const std::vector<double>& actualValues,
-                           const std::vector<double>& predictedValues,
-                           const std::string& xLabel,
-                           const std::string& yLabel,
-                           const std::string& title);
+                          const std::vector<double>& predictedValues,
+                          const std::string& xLabel,
+                          const std::string& yLabel,
+                          const std::string& title);
+
+    /**
+     * @brief Create a time series plot
+     * 
+     * @param actualValues Actual values
+     * @param predictedValues Predicted values
+     * @param title Title of the plot
+     */
+    void createTimeseriesPlot(const std::vector<double>& actualValues,
+                             const std::vector<double>& predictedValues,
+                             const std::string& title);
+
+    /**
+     * @brief Create a feature importance plot
+     * 
+     * @param importance Map of feature names to importance scores
+     * @param title Title of the plot
+     */
+    void createImportancePlot(const std::unordered_map<std::string, double>& importance,
+                             const std::string& title);
 
 protected:
     /**
@@ -160,6 +230,15 @@ private:
      * @return bool True if plot was generated successfully
      */
     bool generatePlot(const std::string& command);
+
+    /**
+     * @brief Create a temporary file with plot data
+     * 
+     * @param data Data to write to file
+     * @param filename Name of the temporary file
+     * @return bool True if file was created successfully
+     */
+    bool createTempDataFile(const std::string& data, const std::string& filename);
 };
 
 /**

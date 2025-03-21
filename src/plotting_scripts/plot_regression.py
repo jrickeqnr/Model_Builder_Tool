@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-Linear Regression Plot Generator
+Regression Plot Generator
 
-This script generates plots for linear regression models using data passed from the C++ application.
-It expects input data containing actual values, predicted values, and feature names.
+This script generates various plots for regression models using data passed from the C++ application.
+It supports multiple plot types including scatter plots, time series plots, and feature importance plots.
 
 Usage:
     Called from the C++ application with appropriate arguments.
     
 Arguments:
-    --data_file: Path to CSV file containing x and y values
-    --model_file: Path to CSV file containing model predictions
+    --data_file: Path to CSV file containing the data
     --output_file: Path to save the plot
-    --x_column: Name of the X column
-    --y_column: Name of the Y column
+    --plot_type: Type of plot to generate (scatter, timeseries, importance)
+    --actual_col: Name of the actual values column
+    --predicted_col: Name of the predicted values column
+    --features: List of feature names and their importance scores (for importance plot)
     --title: Plot title
 """
 
@@ -23,68 +24,124 @@ import numpy as np
 import argparse
 import os
 import sys
+import json
 
-def create_regression_plot(data_file, model_file, output_file, x_column, y_column, title):
-    try:
-        # Load data
-        data = pd.read_csv(data_file)
-        model_data = pd.read_csv(model_file)
-        
-        # Extract x and y values
-        x_values = data[x_column].values
-        y_values = data[y_column].values
-        y_pred = model_data['predicted'].values
-        
-        # Create the plot
-        plt.figure(figsize=(10, 6))
-        
-        # Plot actual data points
-        plt.scatter(x_values, y_values, alpha=0.6, label='Actual Data')
-        
-        # Plot regression line
-        plt.plot(x_values, y_pred, 'r-', linewidth=2, label='Model Prediction')
-        
-        # Add labels and title
-        plt.title(title)
-        plt.xlabel(x_column)
-        plt.ylabel(y_column)
-        plt.legend()
-        plt.grid(True, linestyle='--', alpha=0.7)
-        
-        # Get directory for output file
-        output_dir = os.path.dirname(output_file)
-        if output_dir and not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        
-        # Save the figure
-        plt.savefig(output_file, format='png', dpi=150)
-        print(f"Plot saved as: {os.path.abspath(output_file)}")
-        
-        return True
-    except Exception as e:
-        print(f"Error creating regression plot: {str(e)}", file=sys.stderr)
-        return False
+def create_scatter_plot(data, actual_col, predicted_col, title, output_file):
+    """Create scatter plot of actual vs predicted values."""
+    plt.figure(figsize=(10, 6))
+    
+    # Get actual and predicted values
+    actual = data[actual_col]
+    predicted = data[predicted_col]
+    
+    # Create scatter plot
+    plt.scatter(actual, predicted, alpha=0.6, label='Data Points')
+    
+    # Add perfect prediction line
+    min_val = min(actual.min(), predicted.min())
+    max_val = max(actual.max(), predicted.max())
+    plt.plot([min_val, max_val], [min_val, max_val], 'r--', label='Perfect Prediction')
+    
+    # Add labels and title
+    plt.xlabel('Actual Values')
+    plt.ylabel('Predicted Values')
+    plt.title(title)
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # Save plot
+    plt.savefig(output_file, format='png', dpi=150)
+    plt.close()
+
+def create_timeseries_plot(data, actual_col, predicted_col, title, output_file):
+    """Create time series plot of actual and predicted values."""
+    plt.figure(figsize=(12, 6))
+    
+    # Get actual and predicted values
+    actual = data[actual_col]
+    predicted = data[predicted_col]
+    
+    # Create time series plot
+    plt.plot(actual.index, actual, label='Actual', alpha=0.7)
+    plt.plot(predicted.index, predicted, label='Predicted', alpha=0.7)
+    
+    # Add labels and title
+    plt.xlabel('Time Index')
+    plt.ylabel('Values')
+    plt.title(title)
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # Save plot
+    plt.savefig(output_file, format='png', dpi=150)
+    plt.close()
+
+def create_importance_plot(features_json, title, output_file):
+    """Create bar plot of feature importance scores."""
+    plt.figure(figsize=(10, 6))
+    
+    # Parse feature importance data
+    features = json.loads(features_json)
+    names = list(features.keys())
+    scores = list(features.values())
+    
+    # Sort by importance
+    sorted_idx = np.argsort(scores)
+    pos = np.arange(len(sorted_idx)) + .5
+    
+    # Create horizontal bar plot
+    plt.barh(pos, np.array(scores)[sorted_idx], align='center')
+    plt.yticks(pos, np.array(names)[sorted_idx])
+    
+    # Add labels and title
+    plt.xlabel('Relative Importance')
+    plt.title(title)
+    plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # Save plot
+    plt.savefig(output_file, format='png', dpi=150)
+    plt.close()
 
 def main():
-    parser = argparse.ArgumentParser(description='Generate linear regression plots')
-    parser.add_argument('--data_file', required=True, help='Path to CSV file containing x and y values')
-    parser.add_argument('--model_file', required=True, help='Path to CSV file containing model predictions')
+    parser = argparse.ArgumentParser(description='Generate regression model plots')
+    parser.add_argument('--data_file', help='Path to CSV file containing the data')
     parser.add_argument('--output_file', required=True, help='Path to save the plot')
-    parser.add_argument('--x_column', required=True, help='Name of the X column')
-    parser.add_argument('--y_column', required=True, help='Name of the Y column')
-    parser.add_argument('--title', default='Linear Regression Results', help='Plot title')
+    parser.add_argument('--plot_type', required=True, choices=['scatter', 'timeseries', 'importance'],
+                      help='Type of plot to generate')
+    parser.add_argument('--actual_col', help='Name of the actual values column')
+    parser.add_argument('--predicted_col', help='Name of the predicted values column')
+    parser.add_argument('--features', help='JSON string of feature names and importance scores')
+    parser.add_argument('--title', default='Regression Results', help='Plot title')
     
     args = parser.parse_args()
-    success = create_regression_plot(
-        args.data_file, 
-        args.model_file, 
-        args.output_file,
-        args.x_column,
-        args.y_column,
-        args.title
-    )
     
-    sys.exit(0 if success else 1)
+    try:
+        # Create output directory if it doesn't exist
+        os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
+        
+        if args.plot_type in ['scatter', 'timeseries']:
+            if not args.data_file or not args.actual_col or not args.predicted_col:
+                raise ValueError("Data file and column names are required for scatter and timeseries plots")
+            
+            # Load data
+            data = pd.read_csv(args.data_file)
+            
+            if args.plot_type == 'scatter':
+                create_scatter_plot(data, args.actual_col, args.predicted_col, args.title, args.output_file)
+            else:  # timeseries
+                create_timeseries_plot(data, args.actual_col, args.predicted_col, args.title, args.output_file)
+        
+        elif args.plot_type == 'importance':
+            if not args.features:
+                raise ValueError("Feature importance data is required for importance plot")
+            create_importance_plot(args.features, args.title, args.output_file)
+        
+        print(f"Plot saved as: {os.path.abspath(args.output_file)}")
+        sys.exit(0)
+        
+    except Exception as e:
+        print(f"Error creating plot: {str(e)}", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

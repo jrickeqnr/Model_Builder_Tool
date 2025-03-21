@@ -78,4 +78,15 @@ public:
      * @return std::string Name of target variable
      */
     virtual std::string getTargetName() const = 0;
+
+    /**
+     * @brief Get the feature importance scores
+     * 
+     * This method returns a map of feature names to their importance scores.
+     * The interpretation of importance scores depends on the specific model implementation.
+     * For linear regression, this is based on the absolute values of standardized coefficients.
+     * 
+     * @return std::unordered_map<std::string, double> Map of feature names to importance scores
+     */
+    virtual std::unordered_map<std::string, double> getFeatureImportance() const = 0;
 };

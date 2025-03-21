@@ -12,6 +12,18 @@
 #include <cstdio>
 #include <cstdlib>
 #include <array>
+#include <sstream>
+#include <chrono>
+#include <ctime>
+
+// Add logging function
+void log_debug(const std::string& message) {
+    std::ofstream logFile("debug.log", std::ios::app);
+    auto now = std::chrono::system_clock::now();
+    auto now_c = std::chrono::system_clock::to_time_t(now);
+    logFile << std::ctime(&now_c) << message << std::endl;
+    logFile.close();
+}
 
 // DataTable implementation
 DataTable::DataTable(int x, int y, int w, int h, const char* label)
@@ -139,27 +151,191 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
         const std::string& title) {
     // Create temporary file paths
     std::string tempDataPath = "temp_plot_data.csv";
-    std::string tempImagePath = "temp_plot_image.png"; // Changed from .ppm to .png
+    std::string tempImagePath = "temp_plot_image.png";
+    std::string tempScriptPath = "temp_plot_script.py";
+
+    log_debug("Creating scatter plot - Data file: " + tempDataPath + ", Image file: " + tempImagePath);
+
+    // Write data to temporary file
+    std::ofstream dataFile(tempDataPath);
+    if (!dataFile.is_open()) {
+        log_debug("ERROR: Failed to create temporary data file: " + tempDataPath);
+        fl_alert("Failed to create temporary data file: %s", tempDataPath.c_str());
+        return;
+    }
+
+    dataFile << "actual,predicted\n";
+    for (size_t i = 0; i < std::min(actualValues.size(), predictedValues.size()); ++i) {
+        dataFile << actualValues[i] << "," << predictedValues[i] << "\n";
+    }
+    dataFile.close();
+
+    log_debug("Data file created successfully with " + 
+              std::to_string(std::min(actualValues.size(), predictedValues.size())) + " points");
+
+    // Create plotting script
+    std::ofstream scriptFile(tempScriptPath);
+    if (!scriptFile.is_open()) {
+        log_debug("ERROR: Failed to create temporary script file: " + tempScriptPath);
+        fl_alert("Failed to create temporary script file: %s", tempScriptPath.c_str());
+        return;
+    }
+
+    scriptFile << "import matplotlib.pyplot as plt\n";
+    scriptFile << "import pandas as pd\n";
+    scriptFile << "import numpy as np\n\n";
+    scriptFile << "print('Python script starting...')\n";
+
+    // Read data
+    scriptFile << "# Read data\n";
+    scriptFile << "data = pd.read_csv('" << tempDataPath << "')\n";
+    scriptFile << "print('Data loaded:', len(data), 'rows')\n";
+    scriptFile << "actual = data['actual']\n";
+    scriptFile << "predicted = data['predicted']\n";
+    scriptFile << "print('Data ranges - Actual:', actual.min(), 'to', actual.max())\n";
+    scriptFile << "print('Data ranges - Predicted:', predicted.min(), 'to', predicted.max())\n\n";
+
+    // Create plot with adjusted dimensions
+    scriptFile << "# Create plot\n";
+    scriptFile << "plt.figure(figsize=(4.1, 3.6), dpi=100)\n";  // Adjusted to match widget size
+    scriptFile << "plt.scatter(actual, predicted, alpha=0.7, s=30)\n";  // Reduced marker size
+    scriptFile << "print('Scatter plot created')\n\n";
+
+    // Add perfect prediction line
+    scriptFile << "# Add perfect prediction line\n";
+    scriptFile << "min_val = min(actual.min(), predicted.min())\n";
+    scriptFile << "max_val = max(actual.max(), predicted.max())\n";
+    scriptFile << "plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=1)\n\n";
+
+    // Set labels and title with adjusted font sizes
+    scriptFile << "# Set labels and title\n";
+    scriptFile << "plt.xlabel('" << xLabel << "', fontsize=8)\n";
+    scriptFile << "plt.ylabel('" << yLabel << "', fontsize=8)\n";
+    scriptFile << "plt.title('" << title << "', fontsize=10)\n";
+    scriptFile << "plt.xticks(fontsize=8)\n";
+    scriptFile << "plt.yticks(fontsize=8)\n";
+    scriptFile << "plt.grid(True, linestyle='--', alpha=0.7)\n\n";
+
+    // Save plot
+    scriptFile << "# Save plot\n";
+    scriptFile << "plt.tight_layout()\n";
+    scriptFile << "plt.savefig('" << tempImagePath << "', format='png')\n";
+    scriptFile << "print('Plot saved as:', '" << tempImagePath << "')\n";
+    scriptFile << "plt.close()\n";
+
+    scriptFile.close();
+    log_debug("Python script created successfully");
+
+    // Execute Python script
+    std::string command = "python " + tempScriptPath + " 2>&1";
+    FILE* pipe = _popen(command.c_str(), "r");
+    if (!pipe) {
+        log_debug("ERROR: Failed to execute Python script");
+        fl_alert("Failed to execute Python script");
+        return;
+    }
+
+    // Read and display Python script output
+    char buffer[128];
+    std::string pythonOutput;
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        pythonOutput += buffer;
+    }
+    _pclose(pipe);
+
+    log_debug("Python script output:\n" + pythonOutput);
+
+    // Load the generated PNG image
+    Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
+
+    if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
+        log_debug("Image loaded successfully - Width: " + std::to_string(pngImage->w()) + 
+                 ", Height: " + std::to_string(pngImage->h()));
+
+        // Clean up old image data if it exists
+        if (plotImageData) {
+            delete[] plotImageData;
+            plotImageData = nullptr;
+        }
+
+        // Update image dimensions
+        plotImageWidth = pngImage->w();
+        plotImageHeight = pngImage->h();
+
+        // Copy image data
+        plotImageData = new char[plotImageWidth * plotImageHeight * 3];
+
+        // Access the RGB data from the Fl_PNG_Image
+        const uchar* imageData = reinterpret_cast<const uchar*>(pngImage->data()[0]);
+        int depth = pngImage->d();
+
+        log_debug("Image depth: " + std::to_string(depth));
+
+        // Copy the image data with appropriate conversion
+        for (int y = 0; y < plotImageHeight; y++) {
+            for (int x = 0; x < plotImageWidth; x++) {
+                int srcIdx = (y * plotImageWidth + x) * depth;
+                int dstIdx = (y * plotImageWidth + x) * 3;
+
+                if (depth >= 3) {
+                    // RGB data
+                    plotImageData[dstIdx] = imageData[srcIdx];     // R
+                    plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
+                    plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
+                } else if (depth == 1) {
+                    // Grayscale
+                    plotImageData[dstIdx] = 
+                    plotImageData[dstIdx+1] = 
+                    plotImageData[dstIdx+2] = imageData[srcIdx];
+                }
+            }
+        }
+
+        // Clean up the PNG image
+        delete pngImage;
+
+        // Redraw the widget
+        redraw();
+        log_debug("Plot widget redrawn");
+    } else {
+        log_debug("ERROR: Failed to load the generated plot image: " + tempImagePath);
+        fl_alert("Failed to load the generated plot image: %s", tempImagePath.c_str());
+    }
+
+    // Clean up temporary files
+    std::remove(tempScriptPath.c_str());
+    std::remove(tempDataPath.c_str());
+    std::remove(tempImagePath.c_str());
+    log_debug("Temporary files cleaned up");
+}
+
+void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
+                                    const std::vector<double>& predictedValues,
+                                    const std::string& title)
+{
+    // Create temporary file paths
+    std::string tempDataPath = "temp_plot_data.csv";
+    std::string tempImagePath = "temp_plot_image.png";
     std::string tempScriptPath = "temp_plot_script.py";
 
     // Write data to temporary file
     std::ofstream dataFile(tempDataPath);
     if (!dataFile.is_open()) {
-    fl_alert("Failed to create temporary data file");
-    return;
+        fl_alert("Failed to create temporary data file");
+        return;
     }
 
-    dataFile << "actual,predicted\n";
-    for (size_t i = 0; i < std::min(actualValues.size(), predictedValues.size()); ++i) {
-    dataFile << actualValues[i] << "," << predictedValues[i] << "\n";
+    dataFile << "index,actual,predicted\n";
+    for (size_t i = 0; i < actualValues.size(); ++i) {
+        dataFile << i << "," << actualValues[i] << "," << predictedValues[i] << "\n";
     }
     dataFile.close();
 
     // Create plotting script
     std::ofstream scriptFile(tempScriptPath);
     if (!scriptFile.is_open()) {
-    fl_alert("Failed to create temporary script file");
-    return;
+        fl_alert("Failed to create temporary script file");
+        return;
     }
 
     scriptFile << "import matplotlib.pyplot as plt\n";
@@ -168,33 +344,28 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
 
     // Read data
     scriptFile << "# Read data\n";
-    scriptFile << "data = pd.read_csv('" << tempDataPath << "')\n";
-    scriptFile << "actual = data['actual']\n";
-    scriptFile << "predicted = data['predicted']\n\n";
+    scriptFile << "data = pd.read_csv('" << tempDataPath << "')\n\n";
 
-    // Create plot
+    // Create plot with adjusted dimensions
     scriptFile << "# Create plot\n";
-    scriptFile << "plt.figure(figsize=(8, 6), dpi=100)\n";
-    scriptFile << "plt.scatter(actual, predicted, alpha=0.7)\n\n";
+    scriptFile << "plt.figure(figsize=(4.1, 3.6), dpi=100)\n";  // Adjusted to match widget size
+    scriptFile << "plt.plot(data['index'], data['actual'], label='Actual', alpha=0.7, linewidth=1)\n";
+    scriptFile << "plt.plot(data['index'], data['predicted'], label='Predicted', alpha=0.7, linewidth=1)\n\n";
 
-    // Add perfect prediction line
-    scriptFile << "# Add perfect prediction line\n";
-    scriptFile << "min_val = min(actual.min(), predicted.min())\n";
-    scriptFile << "max_val = max(actual.max(), predicted.max())\n";
-    scriptFile << "plt.plot([min_val, max_val], [min_val, max_val], 'r--')\n\n";
-
-    // Set labels and title
+    // Set labels and title with adjusted font sizes
     scriptFile << "# Set labels and title\n";
-    scriptFile << "plt.xlabel('" << xLabel << "')\n";
-    scriptFile << "plt.ylabel('" << yLabel << "')\n";
-    scriptFile << "plt.title('" << title << "')\n";
+    scriptFile << "plt.xlabel('Time Index', fontsize=8)\n";
+    scriptFile << "plt.ylabel('Values', fontsize=8)\n";
+    scriptFile << "plt.title('" << title << "', fontsize=10)\n";
+    scriptFile << "plt.xticks(fontsize=8)\n";
+    scriptFile << "plt.yticks(fontsize=8)\n";
+    scriptFile << "plt.legend(fontsize=8)\n";
     scriptFile << "plt.grid(True, linestyle='--', alpha=0.7)\n\n";
 
-    // Save plot - using PNG format instead of PPM
+    // Save plot
     scriptFile << "# Save plot\n";
     scriptFile << "plt.tight_layout()\n";
-    scriptFile << "plt.savefig('" << tempImagePath << "', format='png')\n"; // Changed to png
-    scriptFile << "print(f'Plot saved as: {'" << tempImagePath << "'}')\n";
+    scriptFile << "plt.savefig('" << tempImagePath << "', format='png')\n";
     scriptFile << "plt.close()\n";
 
     scriptFile.close();
@@ -204,75 +375,367 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
     int result = std::system(command.c_str());
 
     if (result == 0) {
-    // Load the generated PNG image
-    Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
+        // Load the generated PNG image
+        Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
 
-    if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-    // Clean up old image data if it exists
-    if (plotImageData) {
-    delete[] plotImageData;
-    plotImageData = nullptr;
-    }
+        if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
+            // Clean up old image data if it exists
+            if (plotImageData) {
+                delete[] plotImageData;
+                plotImageData = nullptr;
+            }
 
-    // Update image dimensions
-    plotImageWidth = pngImage->w();
-    plotImageHeight = pngImage->h();
+            // Update image dimensions
+            plotImageWidth = pngImage->w();
+            plotImageHeight = pngImage->h();
 
-    // Copy image data
-    plotImageData = new char[plotImageWidth * plotImageHeight * 3];
+            // Copy image data
+            plotImageData = new char[plotImageWidth * plotImageHeight * 3];
 
-    // Access the RGB data from the Fl_PNG_Image
-    const uchar* imageData = reinterpret_cast<const uchar*>(pngImage->data()[0]);
-    int depth = pngImage->d();
+            // Access the RGB data from the Fl_PNG_Image
+            const uchar* imageData = reinterpret_cast<const uchar*>(pngImage->data()[0]);
+            int depth = pngImage->d();
 
-    // Copy the image data with appropriate conversion
-    for (int y = 0; y < plotImageHeight; y++) {
-    for (int x = 0; x < plotImageWidth; x++) {
-    int srcIdx = (y * plotImageWidth + x) * depth;
-    int dstIdx = (y * plotImageWidth + x) * 3;
+            // Copy the image data with appropriate conversion
+            for (int y = 0; y < plotImageHeight; y++) {
+                for (int x = 0; x < plotImageWidth; x++) {
+                    int srcIdx = (y * plotImageWidth + x) * depth;
+                    int dstIdx = (y * plotImageWidth + x) * 3;
 
-    if (depth >= 3) {
-    // RGB data
-    plotImageData[dstIdx] = imageData[srcIdx];     // R
-    plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
-    plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
-    } else if (depth == 1) {
-    // Grayscale
-    plotImageData[dstIdx] = 
-    plotImageData[dstIdx+1] = 
-    plotImageData[dstIdx+2] = imageData[srcIdx];
-    }
-    }
-    }
+                    if (depth >= 3) {
+                        // RGB data
+                        plotImageData[dstIdx] = imageData[srcIdx];     // R
+                        plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
+                        plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
+                    } else if (depth == 1) {
+                        // Grayscale
+                        plotImageData[dstIdx] = 
+                        plotImageData[dstIdx+1] = 
+                        plotImageData[dstIdx+2] = imageData[srcIdx];
+                    }
+                }
+            }
 
-    // Clean up the PNG image
-    delete pngImage;
+            // Clean up the PNG image
+            delete pngImage;
 
-    // Update the plotBox if it exists
-    if (plotBox) {
-    plotBox->redraw();
-    }
-
-    // Redraw the widget
-    redraw();
+            // Redraw the widget
+            redraw();
+        } else {
+            fl_alert("Failed to load the generated plot image");
+        }
     } else {
-    fl_alert("Failed to load the generated plot image");
-    }
-    } else {
-    fl_alert("Failed to generate plot. Check if Python and matplotlib are installed.");
+        fl_alert("Failed to generate plot. Check if Python and matplotlib are installed.");
     }
 
     // Clean up temporary files
     std::remove(tempScriptPath.c_str());
     std::remove(tempDataPath.c_str());
-    // Don't delete the image immediately, as it might still be in use
-    // Optionally add code to delete it when the app closes
     std::remove(tempImagePath.c_str());
 }
 
-bool PlotWidget::generatePlot(const std::string& command) {
-    // This method is deprecated in favor of createScatterPlot
-    return false;
+void PlotWidget::createImportancePlot(const std::unordered_map<std::string, double>& importance,
+                                    const std::string& title)
+{
+    // Create temporary file paths
+    std::string tempDataPath = "temp_plot_data.csv";
+    std::string tempImagePath = "temp_plot_image.png";
+    std::string tempScriptPath = "temp_plot_script.py";
+
+    // Write data to temporary file
+    std::ofstream dataFile(tempDataPath);
+    if (!dataFile.is_open()) {
+        fl_alert("Failed to create temporary data file");
+        return;
+    }
+
+    dataFile << "feature,importance\n";
+    for (const auto& pair : importance) {
+        dataFile << pair.first << "," << pair.second << "\n";
+    }
+    dataFile.close();
+
+    // Create plotting script
+    std::ofstream scriptFile(tempScriptPath);
+    if (!scriptFile.is_open()) {
+        fl_alert("Failed to create temporary script file");
+        return;
+    }
+
+    scriptFile << "import matplotlib.pyplot as plt\n";
+    scriptFile << "import pandas as pd\n";
+    scriptFile << "import numpy as np\n\n";
+
+    // Read data
+    scriptFile << "# Read data\n";
+    scriptFile << "data = pd.read_csv('" << tempDataPath << "')\n";
+    scriptFile << "data = data.sort_values('importance', ascending=True)\n\n";
+
+    // Create plot with adjusted dimensions
+    scriptFile << "# Create plot\n";
+    scriptFile << "plt.figure(figsize=(4.1, 3.6), dpi=100)\n";  // Adjusted to match widget size
+    scriptFile << "y_pos = np.arange(len(data['feature']))\n";
+    scriptFile << "plt.barh(y_pos, data['importance'], align='center', height=0.5)\n";  // Adjusted bar height
+    scriptFile << "plt.yticks(y_pos, data['feature'], fontsize=8)\n\n";
+
+    // Set labels and title with adjusted font sizes
+    scriptFile << "# Set labels and title\n";
+    scriptFile << "plt.xlabel('Relative Importance', fontsize=8)\n";
+    scriptFile << "plt.title('" << title << "', fontsize=10)\n";
+    scriptFile << "plt.xticks(fontsize=8)\n";
+    scriptFile << "plt.grid(True, linestyle='--', alpha=0.7)\n\n";
+
+    // Add tight layout with adjusted margins
+    scriptFile << "# Adjust layout\n";
+    scriptFile << "plt.tight_layout(pad=0.5)\n";  // Reduced padding
+    scriptFile << "plt.savefig('" << tempImagePath << "', format='png', bbox_inches='tight')\n";
+    scriptFile << "plt.close()\n";
+
+    scriptFile.close();
+
+    // Execute Python script
+    std::string command = "python " + tempScriptPath;
+    int result = std::system(command.c_str());
+
+    if (result == 0) {
+        // Load the generated PNG image
+        Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
+
+        if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
+            // Clean up old image data if it exists
+            if (plotImageData) {
+                delete[] plotImageData;
+                plotImageData = nullptr;
+            }
+
+            // Update image dimensions
+            plotImageWidth = pngImage->w();
+            plotImageHeight = pngImage->h();
+
+            // Copy image data
+            plotImageData = new char[plotImageWidth * plotImageHeight * 3];
+
+            // Access the RGB data from the Fl_PNG_Image
+            const uchar* imageData = reinterpret_cast<const uchar*>(pngImage->data()[0]);
+            int depth = pngImage->d();
+
+            // Copy the image data with appropriate conversion
+            for (int y = 0; y < plotImageHeight; y++) {
+                for (int x = 0; x < plotImageWidth; x++) {
+                    int srcIdx = (y * plotImageWidth + x) * depth;
+                    int dstIdx = (y * plotImageWidth + x) * 3;
+
+                    if (depth >= 3) {
+                        // RGB data
+                        plotImageData[dstIdx] = imageData[srcIdx];     // R
+                        plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
+                        plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
+                    } else if (depth == 1) {
+                        // Grayscale
+                        plotImageData[dstIdx] = 
+                        plotImageData[dstIdx+1] = 
+                        plotImageData[dstIdx+2] = imageData[srcIdx];
+                    }
+                }
+            }
+
+            // Clean up the PNG image
+            delete pngImage;
+
+            // Redraw the widget
+            redraw();
+        } else {
+            fl_alert("Failed to load the generated plot image");
+        }
+    } else {
+        fl_alert("Failed to generate plot. Check if Python and matplotlib are installed.");
+    }
+
+    // Clean up temporary files
+    std::remove(tempScriptPath.c_str());
+    std::remove(tempDataPath.c_str());
+    std::remove(tempImagePath.c_str());
+}
+
+bool PlotWidget::createTempDataFile(const std::string& data, const std::string& filename)
+{
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        return false;
+    }
+    
+    file << data;
+    file.close();
+    return true;
+}
+
+// PlotNavigator implementation
+PlotNavigator::PlotNavigator(int x, int y, int w, int h)
+    : Fl_Group(x, y, w, h), currentPlotIndex(0)
+{
+    box(FL_DOWN_BOX);
+    color(FL_WHITE);
+
+    // Create navigation buttons at the bottom
+    int buttonWidth = 30;
+    int buttonHeight = 25;
+    int buttonY = y + h - buttonHeight - 5;
+    
+    prevButton = new Fl_Button(x + 5, buttonY, buttonWidth, buttonHeight, "@<");
+    prevButton->callback(prevButtonCallback, this);
+    
+    nextButton = new Fl_Button(x + w - buttonWidth - 5, buttonY, buttonWidth, buttonHeight, "@>");
+    nextButton->callback(nextButtonCallback, this);
+    
+    // Create plot label
+    plotLabel = new Fl_Box(x + buttonWidth + 10, buttonY, w - 2*buttonWidth - 20, buttonHeight);
+    plotLabel->align(FL_ALIGN_CENTER | FL_ALIGN_INSIDE);
+    
+    end();
+    updateNavigationButtons();
+}
+
+PlotNavigator::~PlotNavigator()
+{
+    clearPlots();
+}
+
+void PlotNavigator::createPlot(const std::shared_ptr<DataFrame>& data,
+                             const std::shared_ptr<Model>& model,
+                             const std::string& plotType,
+                             const std::string& title)
+{
+    log_debug("Creating plot of type: " + plotType);
+    
+    int plotX = x() + 5;
+    int plotY = y() + 5;
+    int plotW = w() - 10;
+    int plotH = h() - 40;  // Leave space for navigation buttons
+    
+    log_debug("Plot dimensions - X: " + std::to_string(plotX) + 
+              ", Y: " + std::to_string(plotY) + 
+              ", W: " + std::to_string(plotW) + 
+              ", H: " + std::to_string(plotH));
+    
+    PlotWidget* plot = new PlotWidget(plotX, plotY, plotW, plotH);
+    plots.push_back(plot);
+    
+    // Create the plot based on type
+    if (plotType == "scatter") {
+        std::vector<double> actual = data->getColumn(model->getTargetName());
+        Eigen::MatrixXd X = data->toMatrix(model->getVariableNames());
+        Eigen::VectorXd predicted = model->predict(X);
+        std::vector<double> predictedVec(predicted.data(), predicted.data() + predicted.size());
+        
+        log_debug("Scatter plot data size - Actual: " + std::to_string(actual.size()) + 
+                 ", Predicted: " + std::to_string(predictedVec.size()));
+        
+        plot->createScatterPlot(actual, predictedVec, "Actual Values", "Predicted Values", title);
+    }
+    else if (plotType == "timeseries") {
+        std::vector<double> actual = data->getColumn(model->getTargetName());
+        Eigen::MatrixXd X = data->toMatrix(model->getVariableNames());
+        Eigen::VectorXd predicted = model->predict(X);
+        std::vector<double> predictedVec(predicted.data(), predicted.data() + predicted.size());
+        
+        log_debug("Time series plot data size - Actual: " + std::to_string(actual.size()) + 
+                 ", Predicted: " + std::to_string(predictedVec.size()));
+        
+        plot->createTimeseriesPlot(actual, predictedVec, title);
+    }
+    else if (plotType == "importance") {
+        auto importance = model->getFeatureImportance();
+        
+        log_debug("Feature importance plot - Number of features: " + std::to_string(importance.size()));
+        
+        plot->createImportancePlot(importance, title);
+    }
+    
+    log_debug("Adding plot to navigator");
+    add(plot);
+    
+    log_debug("Plot widget dimensions after add - X: " + std::to_string(plot->x()) + 
+              ", Y: " + std::to_string(plot->y()) + 
+              ", W: " + std::to_string(plot->w()) + 
+              ", H: " + std::to_string(plot->h()));
+    
+    updateVisibility();
+    updateNavigationButtons();
+    log_debug("Plot creation completed");
+}
+
+void PlotNavigator::nextPlot()
+{
+    if (currentPlotIndex < plots.size() - 1) {
+        currentPlotIndex++;
+        updateVisibility();
+        updateNavigationButtons();
+    }
+}
+
+void PlotNavigator::prevPlot()
+{
+    if (currentPlotIndex > 0) {
+        currentPlotIndex--;
+        updateVisibility();
+        updateNavigationButtons();
+    }
+}
+
+void PlotNavigator::clearPlots()
+{
+    for (auto plot : plots) {
+        remove(plot);
+        delete plot;
+    }
+    plots.clear();
+    currentPlotIndex = 0;
+    updateNavigationButtons();
+}
+
+void PlotNavigator::prevButtonCallback(Fl_Widget*, void* v)
+{
+    ((PlotNavigator*)v)->prevPlot();
+}
+
+void PlotNavigator::nextButtonCallback(Fl_Widget*, void* v)
+{
+    ((PlotNavigator*)v)->nextPlot();
+}
+
+void PlotNavigator::updateVisibility()
+{
+    for (size_t i = 0; i < plots.size(); i++) {
+        if (i == currentPlotIndex) {
+            plots[i]->show();
+        } else {
+            plots[i]->hide();
+        }
+    }
+    
+    // Update plot label
+    if (!plots.empty()) {
+        char label[32];
+        snprintf(label, sizeof(label), "Plot %zu of %zu", currentPlotIndex + 1, plots.size());
+        plotLabel->copy_label(label);
+    } else {
+        plotLabel->copy_label("No plots available");
+    }
+    
+    redraw();
+}
+
+void PlotNavigator::updateNavigationButtons()
+{
+    prevButton->activate();
+    nextButton->activate();
+    
+    if (plots.empty() || currentPlotIndex == 0) {
+        prevButton->deactivate();
+    }
+    if (plots.empty() || currentPlotIndex == plots.size() - 1) {
+        nextButton->deactivate();
+    }
 }
 
 // ResultsView implementation
@@ -289,7 +752,7 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     int margin = 20;
     int headerHeight = 40;
     int bottomButtonsHeight = 40;
-    int equationHeight = 60; // Height for equation display
+    int equationHeight = 60;
     
     // Create title label
     modelTitleLabel = new Fl_Box(x + margin, y + margin, w - 2*margin, headerHeight, "Model Results");
@@ -304,7 +767,6 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     equationLabel->labelsize(14);
     equationLabel->labelfont(FL_BOLD);
     
-    // Box to display the actual equation
     equationDisplay = new Fl_Box(x + margin + 20, y + margin + headerHeight + 25, 
                                 w - 2*margin - 40, equationHeight - 20, "");
     equationDisplay->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
@@ -326,9 +788,8 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     parametersLabel->labelsize(14);
     parametersLabel->labelfont(FL_BOLD);
     
-    DataTable* paramsTable = new DataTable(
-        x + margin + 10, contentY + 50, 
-        tableWidth - 20, contentHeight/2 - 60);
+    DataTable* paramsTable = new DataTable(x + margin + 10, contentY + 50, 
+                                         tableWidth - 20, contentHeight/2 - 60);
     
     parametersGroup->end();
     
@@ -342,14 +803,13 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     statisticsLabel->labelsize(14);
     statisticsLabel->labelfont(FL_BOLD);
     
-    DataTable* statsTable = new DataTable(
-        x + margin + 10, contentY + contentHeight/2 + 60, 
-        tableWidth - 20, contentHeight/2 - 70);
+    DataTable* statsTable = new DataTable(x + margin + 10, contentY + contentHeight/2 + 60, 
+                                        tableWidth - 20, contentHeight/2 - 70);
     
     statisticsGroup->end();
     
-    // Plot group (right side)
-    plotWidget = new PlotWidget(x + margin*2 + tableWidth, contentY, tableWidth, contentHeight);
+    // Plot navigator (right side)
+    plotNavigator = new PlotNavigator(x + margin*2 + tableWidth, contentY, tableWidth, contentHeight);
     
     // Create bottom buttons
     int buttonY = y + h - margin - bottomButtonsHeight;
@@ -395,8 +855,8 @@ void ResultsView::updateResults() {
     updateParametersDisplay();
     updateStatisticsDisplay();
     
-    // Create visualization
-    createScatterPlot();
+    // Create visualizations
+    createPlots();
     
     // Redraw the widget
     redraw();
@@ -580,28 +1040,23 @@ std::string ResultsView::getEquationString() const {
     return equation.str();
 }
 
-void ResultsView::createScatterPlot() {
+void ResultsView::createPlots()
+{
     if (!model || !dataFrame) {
         return;
     }
     
-    // Get actual values
-    std::vector<double> actualValues = dataFrame->getColumn(targetVariable);
-    
-    // Get input data for prediction
-    Eigen::MatrixXd X = dataFrame->toMatrix(inputVariables);
-    
-    // Get predicted values
-    Eigen::VectorXd predictedValuesEigen = model->predict(X);
-    
-    // Convert to std::vector
-    std::vector<double> predictedValues(predictedValuesEigen.data(), 
-                                      predictedValuesEigen.data() + predictedValuesEigen.size());
+    // Clear existing plots
+    plotNavigator->clearPlots();
     
     // Create scatter plot
-    plotWidget->createScatterPlot(actualValues, predictedValues,
-                                "Actual Values", "Predicted Values",
-                                "Actual vs. Predicted Values");
+    plotNavigator->createPlot(dataFrame, model, "scatter", "Actual vs. Predicted Values");
+    
+    // Create time series plot
+    plotNavigator->createPlot(dataFrame, model, "timeseries", "Time Series of Actual and Predicted Values");
+    
+    // Create feature importance plot
+    plotNavigator->createPlot(dataFrame, model, "importance", "Feature Importance");
 }
 
 void ResultsView::exportResults() {

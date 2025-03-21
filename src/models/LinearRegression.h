@@ -111,6 +111,18 @@ public:
      */
     std::string getTargetName() const override;
 
+    /**
+     * @brief Get the feature importance scores
+     * 
+     * For linear regression, feature importance is calculated using
+     * standardized coefficients (absolute values). The coefficients
+     * are standardized by scaling them with the standard deviation
+     * of their respective features.
+     * 
+     * @return std::unordered_map<std::string, double> Map of feature names to importance scores
+     */
+    std::unordered_map<std::string, double> getFeatureImportance() const override;
+
 private:
     Eigen::VectorXd coefficients;
     double intercept;
@@ -125,6 +137,9 @@ private:
     std::vector<std::string> inputVariableNames;
     std::string targetVariableName;
 
+    // Store feature standard deviations for importance calculation
+    Eigen::VectorXd featureStdDevs;
+
     /**
      * @brief Calculate model statistics after fitting
      * 
@@ -132,4 +147,11 @@ private:
      * @param y Target values used for fitting
      */
     void calculateStatistics(const Eigen::MatrixXd& X, const Eigen::VectorXd& y);
+
+    /**
+     * @brief Calculate feature standard deviations
+     * 
+     * @param X Input features matrix
+     */
+    void calculateFeatureStdDevs(const Eigen::MatrixXd& X);
 };

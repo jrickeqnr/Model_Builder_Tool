@@ -51,6 +51,9 @@ bool LinearRegression::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y,
         // Store target variable name
         targetVariableName = targetName.empty() ? "Target" : targetName;
 
+        // Calculate feature standard deviations for importance calculation
+        calculateFeatureStdDevs(X);
+
         // Add a column of ones to X for the intercept
         Eigen::MatrixXd X_aug(nSamples, nFeatures + 1);
         X_aug.col(0).setOnes();
@@ -175,4 +178,42 @@ void LinearRegression::calculateStatistics(const Eigen::MatrixXd& X, const Eigen
     
     // Calculate RMSE
     rmse = std::sqrt(sse / nSamples);
+}
+
+void LinearRegression::calculateFeatureStdDevs(const Eigen::MatrixXd& X) {
+    // Initialize feature standard deviations vector
+    featureStdDevs = Eigen::VectorXd(X.cols());
+    
+    // Calculate standard deviation for each feature
+    for (int i = 0; i < X.cols(); ++i) {
+        Eigen::VectorXd feature = X.col(i);
+        double mean = feature.mean();
+        featureStdDevs(i) = std::sqrt((feature.array() - mean).square().sum() / (feature.size() - 1));
+    }
+}
+
+std::unordered_map<std::string, double> LinearRegression::getFeatureImportance() const {
+    if (!isFitted) {
+        throw std::runtime_error("Model has not been fitted yet");
+    }
+
+    std::unordered_map<std::string, double> importance;
+    
+    // Calculate standardized coefficients
+    Eigen::VectorXd standardizedCoefs = coefficients.array() * featureStdDevs.array();
+    
+    // Take absolute values and normalize to sum to 1
+    Eigen::VectorXd absStandardizedCoefs = standardizedCoefs.array().abs();
+    double sum = absStandardizedCoefs.sum();
+    
+    // Store normalized importance scores
+    for (int i = 0; i < nFeatures; ++i) {
+        if (i < inputVariableNames.size()) {
+            importance[inputVariableNames[i]] = absStandardizedCoefs(i) / sum;
+        } else {
+            importance["Variable_" + std::to_string(i+1)] = absStandardizedCoefs(i) / sum;
+        }
+    }
+    
+    return importance;
 }
