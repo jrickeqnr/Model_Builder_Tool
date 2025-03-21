@@ -22,6 +22,11 @@ include_directories(
     ${FLTK_INCLUDE_DIRS}
 )
 
+# Add compile definitions
+add_compile_definitions(
+    CMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+)
+
 # Add matplotlib-cpp as a header-only library
 add_library(matplotlib_cpp INTERFACE)
 target_include_directories(matplotlib_cpp INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -34,6 +39,8 @@ set(SOURCES
     src/gui/ModelSelector.cpp
     src/gui/VariableSelector.cpp
     src/gui/ResultsView.cpp
+    src/gui/ExportDialog.cpp
+    src/gui/DataTable.cpp
     src/models/LinearRegression.cpp
     src/data/CSVReader.cpp
     src/data/DataFrame.cpp

@@ -15,6 +15,7 @@
 #include <sstream>
 #include <chrono>
 #include <ctime>
+#include <filesystem>
 
 // Add logging function with file clearing on first use
 void log_debug(const std::string& message) {
@@ -33,91 +34,6 @@ void log_debug(const std::string& message) {
     auto now_c = std::chrono::system_clock::to_time_t(now);
     logFile << std::ctime(&now_c) << message << std::endl;
     logFile.close();
-}
-
-// DataTable implementation
-DataTable::DataTable(int x, int y, int w, int h, const char* label)
-    : Fl_Table(x, y, w, h, label) 
-{
-    // Setup the table
-    rows(0);
-    row_header(0);
-    row_height_all(25);
-    row_resize(0);
-    
-    cols(2);
-    col_header(1);
-    col_width(0, w/2);
-    col_width(1, w/2);
-    col_resize(1);
-    
-    end();
-}
-
-DataTable::~DataTable() {
-    // No explicit cleanup needed
-}
-
-void DataTable::setData(const std::unordered_map<std::string, double>& data) {
-    // Clear existing data
-    names.clear();
-    values.clear();
-    
-    // Copy data to vectors for table display
-    for (const auto& pair : data) {
-        names.push_back(pair.first);
-        values.push_back(pair.second);
-    }
-    
-    // Update table rows
-    rows(names.size());
-    row_height_all(25);
-    
-    // Force redraw
-    redraw();
-}
-
-void DataTable::draw_cell(TableContext context, int row, int col, int x, int y, int w, int h) {
-    switch (context) {
-        case CONTEXT_CELL: {
-            // Draw cell content
-            fl_push_clip(x, y, w, h);
-            fl_color(FL_WHITE);
-            fl_rectf(x, y, w, h);
-            fl_color(FL_GRAY0);
-            fl_rect(x, y, w, h);
-            
-            fl_color(FL_BLACK);
-            fl_font(FL_HELVETICA, 14);
-            if (col == 0 && row < names.size()) {
-                fl_draw(names[row].c_str(), x + 5, y, w - 10, h, FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-            } else if (col == 1 && row < values.size()) {
-                char valStr[50];
-                snprintf(valStr, sizeof(valStr), "%.6f", values[row]);
-                fl_draw(valStr, x + 5, y, w - 10, h, FL_ALIGN_RIGHT | FL_ALIGN_INSIDE);
-            }
-            fl_pop_clip();
-            break;
-        }
-        
-        case CONTEXT_COL_HEADER: {
-            // Draw column headers
-            fl_push_clip(x, y, w, h);
-            fl_draw_box(FL_THIN_UP_BOX, x, y, w, h, FL_BACKGROUND_COLOR);
-            fl_color(FL_BLACK);
-            fl_font(FL_HELVETICA_BOLD, 14);
-            if (col == 0) {
-                fl_draw("Parameter", x + 5, y, w - 10, h, FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-            } else {
-                fl_draw("Value", x + 5, y, w - 10, h, FL_ALIGN_RIGHT | FL_ALIGN_INSIDE);
-            }
-            fl_pop_clip();
-            break;
-        }
-        
-        default:
-            break;
-    }
 }
 
 // PlotWidget implementation
@@ -195,13 +111,15 @@ void PlotWidget::regeneratePlot() {
     switch (currentPlotType) {
         case PlotType::Scatter:
             createScatterPlot(storedActualValues, storedPredictedValues, 
-                            storedXLabel, storedYLabel, storedTitle);
+                            storedXLabel, storedYLabel, storedTitle,
+                            "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
             break;
         case PlotType::Timeseries:
-            createTimeseriesPlot(storedActualValues, storedPredictedValues, storedTitle);
+            createTimeseriesPlot(storedActualValues, storedPredictedValues, storedTitle,
+                                "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
             break;
         case PlotType::Importance:
-            createImportancePlot(storedImportance, storedTitle);
+            createImportancePlot(storedImportance, storedTitle, "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
             break;
         case PlotType::None:
             break;
@@ -212,7 +130,11 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
                                  const std::vector<double>& predictedValues,
                                  const std::string& xLabel,
                                  const std::string& yLabel,
-                                 const std::string& title) {
+                                 const std::string& title,
+                                 const std::string& tempDataPath,
+                                 const std::string& tempImagePath,
+                                 const std::string& tempScriptPath)
+{
     // Store data for regeneration
     currentPlotType = PlotType::Scatter;
     storedActualValues = actualValues;
@@ -220,11 +142,6 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
     storedXLabel = xLabel;
     storedYLabel = yLabel;
     storedTitle = title;
-
-    // Create temporary file paths
-    std::string tempDataPath = "temp_plot_data.csv";
-    std::string tempImagePath = "temp_plot_image.png";
-    std::string tempScriptPath = "temp_plot_script.py";
 
     log_debug("Creating scatter plot - Data file: " + tempDataPath + ", Image file: " + tempImagePath);
 
@@ -307,43 +224,39 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
         return;
     }
 
-    // Read and display Python script output
+    // Read and log the output
     char buffer[128];
-    std::string pythonOutput;
+    std::string result = "";
     while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-        pythonOutput += buffer;
+        result += buffer;
     }
-    _pclose(pipe);
+    log_debug("Python script output:\n" + result);
 
-    log_debug("Python script output:\n" + pythonOutput);
+    // Close the pipe
+    int status = _pclose(pipe);
+    if (status != 0) {
+        log_debug("ERROR: Python script failed with status " + std::to_string(status));
+        fl_alert("Failed to generate plot. Check if Python and matplotlib are installed.");
+        return;
+    }
 
-    // Load the generated PNG image
+    // Load the generated image
     Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
-
     if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-        log_debug("Image loaded successfully - Width: " + std::to_string(pngImage->w()) + 
-                 ", Height: " + std::to_string(pngImage->h()));
-
-        // Clean up old image data if it exists
-        if (plotImageData) {
-            delete[] plotImageData;
-            plotImageData = nullptr;
-        }
-
-        // Update image dimensions
+        // Store the image dimensions
         plotImageWidth = pngImage->w();
         plotImageHeight = pngImage->h();
 
-        // Copy image data
-        plotImageData = new char[plotImageWidth * plotImageHeight * 3];
+        // Create a new buffer for the image data
+        if (plotImageData) {
+            delete[] plotImageData;
+        }
+        plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
 
-        // Access the RGB data from the Fl_PNG_Image
-        const uchar* imageData = reinterpret_cast<const uchar*>(pngImage->data()[0]);
+        // Copy the image data
+        const char* imageData = (const char*)pngImage->data()[0];
         int depth = pngImage->d();
 
-        log_debug("Image depth: " + std::to_string(depth));
-
-        // Copy the image data with appropriate conversion
         for (int y = 0; y < plotImageHeight; y++) {
             for (int x = 0; x < plotImageWidth; x++) {
                 int srcIdx = (y * plotImageWidth + x) * depth;
@@ -373,27 +286,19 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
         log_debug("ERROR: Failed to load the generated plot image: " + tempImagePath);
         fl_alert("Failed to load the generated plot image: %s", tempImagePath.c_str());
     }
-
-    // Clean up temporary files
-    std::remove(tempScriptPath.c_str());
-    std::remove(tempDataPath.c_str());
-    std::remove(tempImagePath.c_str());
-    log_debug("Temporary files cleaned up");
 }
 
 void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
                                     const std::vector<double>& predictedValues,
-                                    const std::string& title) {
+                                    const std::string& title,
+                                    const std::string& tempDataPath,
+                                    const std::string& tempImagePath,
+                                    const std::string& tempScriptPath) {
     // Store data for regeneration
     currentPlotType = PlotType::Timeseries;
     storedActualValues = actualValues;
     storedPredictedValues = predictedValues;
     storedTitle = title;
-
-    // Create temporary file paths
-    std::string tempDataPath = "temp_plot_data.csv";
-    std::string tempImagePath = "temp_plot_image.png";
-    std::string tempScriptPath = "temp_plot_script.py";
 
     // Write data to temporary file
     std::ofstream dataFile(tempDataPath);
@@ -454,78 +359,66 @@ void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
     // Execute Python script
     std::string command = "python " + tempScriptPath;
     int result = std::system(command.c_str());
-
-    if (result == 0) {
-        // Load the generated PNG image
-        Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
-
-        if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-            // Clean up old image data if it exists
-            if (plotImageData) {
-                delete[] plotImageData;
-                plotImageData = nullptr;
-            }
-
-            // Update image dimensions
-            plotImageWidth = pngImage->w();
-            plotImageHeight = pngImage->h();
-
-            // Copy image data
-            plotImageData = new char[plotImageWidth * plotImageHeight * 3];
-
-            // Access the RGB data from the Fl_PNG_Image
-            const uchar* imageData = reinterpret_cast<const uchar*>(pngImage->data()[0]);
-            int depth = pngImage->d();
-
-            // Copy the image data with appropriate conversion
-            for (int y = 0; y < plotImageHeight; y++) {
-                for (int x = 0; x < plotImageWidth; x++) {
-                    int srcIdx = (y * plotImageWidth + x) * depth;
-                    int dstIdx = (y * plotImageWidth + x) * 3;
-
-                    if (depth >= 3) {
-                        // RGB data
-                        plotImageData[dstIdx] = imageData[srcIdx];     // R
-                        plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
-                        plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
-                    } else if (depth == 1) {
-                        // Grayscale
-                        plotImageData[dstIdx] = 
-                        plotImageData[dstIdx+1] = 
-                        plotImageData[dstIdx+2] = imageData[srcIdx];
-                    }
-                }
-            }
-
-            // Clean up the PNG image
-            delete pngImage;
-
-            // Redraw the widget
-            redraw();
-        } else {
-            fl_alert("Failed to load the generated plot image");
-        }
-    } else {
+    if (result != 0) {
         fl_alert("Failed to generate plot. Check if Python and matplotlib are installed.");
+        return;
     }
 
-    // Clean up temporary files
-    std::remove(tempScriptPath.c_str());
-    std::remove(tempDataPath.c_str());
-    std::remove(tempImagePath.c_str());
+    // Load the generated image
+    Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
+    if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
+        // Store the image dimensions
+        plotImageWidth = pngImage->w();
+        plotImageHeight = pngImage->h();
+
+        // Create a new buffer for the image data
+        if (plotImageData) {
+            delete[] plotImageData;
+        }
+        plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
+
+        // Copy the image data
+        const char* imageData = (const char*)pngImage->data()[0];
+        int depth = pngImage->d();
+
+        for (int y = 0; y < plotImageHeight; y++) {
+            for (int x = 0; x < plotImageWidth; x++) {
+                int srcIdx = (y * plotImageWidth + x) * depth;
+                int dstIdx = (y * plotImageWidth + x) * 3;
+
+                if (depth >= 3) {
+                    // RGB data
+                    plotImageData[dstIdx] = imageData[srcIdx];     // R
+                    plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
+                    plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
+                } else if (depth == 1) {
+                    // Grayscale
+                    plotImageData[dstIdx] = 
+                    plotImageData[dstIdx+1] = 
+                    plotImageData[dstIdx+2] = imageData[srcIdx];
+                }
+            }
+        }
+
+        // Clean up the PNG image
+        delete pngImage;
+
+        // Redraw the widget
+        redraw();
+    } else {
+        fl_alert("Failed to load the generated plot image: %s", tempImagePath.c_str());
+    }
 }
 
 void PlotWidget::createImportancePlot(const std::unordered_map<std::string, double>& importance,
-                                    const std::string& title) {
+                                    const std::string& title,
+                                    const std::string& tempDataPath,
+                                    const std::string& tempImagePath,
+                                    const std::string& tempScriptPath) {
     // Store data for regeneration
     currentPlotType = PlotType::Importance;
     storedImportance = importance;
     storedTitle = title;
-
-    // Create temporary file paths
-    std::string tempDataPath = "temp_plot_data.csv";
-    std::string tempImagePath = "temp_plot_image.png";
-    std::string tempScriptPath = "temp_plot_script.py";
 
     // Write data to temporary file
     std::ofstream dataFile(tempDataPath);
@@ -585,65 +478,55 @@ void PlotWidget::createImportancePlot(const std::unordered_map<std::string, doub
     // Execute Python script
     std::string command = "python " + tempScriptPath;
     int result = std::system(command.c_str());
-
-    if (result == 0) {
-        // Load the generated PNG image
-        Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
-
-        if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-            // Clean up old image data if it exists
-            if (plotImageData) {
-                delete[] plotImageData;
-                plotImageData = nullptr;
-            }
-
-            // Update image dimensions
-            plotImageWidth = pngImage->w();
-            plotImageHeight = pngImage->h();
-
-            // Copy image data
-            plotImageData = new char[plotImageWidth * plotImageHeight * 3];
-
-            // Access the RGB data from the Fl_PNG_Image
-            const uchar* imageData = reinterpret_cast<const uchar*>(pngImage->data()[0]);
-            int depth = pngImage->d();
-
-            // Copy the image data with appropriate conversion
-            for (int y = 0; y < plotImageHeight; y++) {
-                for (int x = 0; x < plotImageWidth; x++) {
-                    int srcIdx = (y * plotImageWidth + x) * depth;
-                    int dstIdx = (y * plotImageWidth + x) * 3;
-
-                    if (depth >= 3) {
-                        // RGB data
-                        plotImageData[dstIdx] = imageData[srcIdx];     // R
-                        plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
-                        plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
-                    } else if (depth == 1) {
-                        // Grayscale
-                        plotImageData[dstIdx] = 
-                        plotImageData[dstIdx+1] = 
-                        plotImageData[dstIdx+2] = imageData[srcIdx];
-                    }
-                }
-            }
-
-            // Clean up the PNG image
-            delete pngImage;
-
-            // Redraw the widget
-            redraw();
-        } else {
-            fl_alert("Failed to load the generated plot image");
-        }
-    } else {
+    if (result != 0) {
         fl_alert("Failed to generate plot. Check if Python and matplotlib are installed.");
+        return;
     }
 
-    // Clean up temporary files
-    std::remove(tempScriptPath.c_str());
-    std::remove(tempDataPath.c_str());
-    std::remove(tempImagePath.c_str());
+    // Load the generated image
+    Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
+    if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
+        // Store the image dimensions
+        plotImageWidth = pngImage->w();
+        plotImageHeight = pngImage->h();
+
+        // Create a new buffer for the image data
+        if (plotImageData) {
+            delete[] plotImageData;
+        }
+        plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
+
+        // Copy the image data
+        const char* imageData = (const char*)pngImage->data()[0];
+        int depth = pngImage->d();
+
+        for (int y = 0; y < plotImageHeight; y++) {
+            for (int x = 0; x < plotImageWidth; x++) {
+                int srcIdx = (y * plotImageWidth + x) * depth;
+                int dstIdx = (y * plotImageWidth + x) * 3;
+
+                if (depth >= 3) {
+                    // RGB data
+                    plotImageData[dstIdx] = imageData[srcIdx];     // R
+                    plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
+                    plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
+                } else if (depth == 1) {
+                    // Grayscale
+                    plotImageData[dstIdx] = 
+                    plotImageData[dstIdx+1] = 
+                    plotImageData[dstIdx+2] = imageData[srcIdx];
+                }
+            }
+        }
+
+        // Clean up the PNG image
+        delete pngImage;
+
+        // Redraw the widget
+        redraw();
+    } else {
+        fl_alert("Failed to load the generated plot image: %s", tempImagePath.c_str());
+    }
 }
 
 bool PlotWidget::createTempDataFile(const std::string& data, const std::string& filename)
@@ -656,6 +539,55 @@ bool PlotWidget::createTempDataFile(const std::string& data, const std::string& 
     file << data;
     file.close();
     return true;
+}
+
+bool PlotWidget::savePlot(const std::string& filename) {
+    // Create temporary file paths with unique names using the current plot type
+    std::string tempDataPath = "temp_plot_data_" + std::to_string(reinterpret_cast<uintptr_t>(this)) + ".csv";
+    std::string tempImagePath = "temp_plot_image_" + std::to_string(reinterpret_cast<uintptr_t>(this)) + ".png";
+    std::string tempScriptPath = "temp_plot_script_" + std::to_string(reinterpret_cast<uintptr_t>(this)) + ".py";
+
+    // Regenerate the plot with these specific temporary files
+    switch (currentPlotType) {
+        case PlotType::Scatter:
+            createScatterPlot(storedActualValues, storedPredictedValues, 
+                            storedXLabel, storedYLabel, storedTitle,
+                            tempDataPath, tempImagePath, tempScriptPath);
+            break;
+        case PlotType::Timeseries:
+            createTimeseriesPlot(storedActualValues, storedPredictedValues, storedTitle,
+                                tempDataPath, tempImagePath, tempScriptPath);
+            break;
+        case PlotType::Importance:
+            createImportancePlot(storedImportance, storedTitle, tempDataPath, tempImagePath, tempScriptPath);
+            break;
+        case PlotType::None:
+            return false;
+    }
+
+    // Copy the generated plot to the target location
+    try {
+        std::filesystem::path sourcePath(tempImagePath);
+        std::filesystem::path targetPath(filename);
+        
+        // Create the target directory if it doesn't exist
+        std::filesystem::create_directories(targetPath.parent_path());
+        
+        // Copy the file
+        std::filesystem::copy_file(sourcePath, targetPath, 
+                                 std::filesystem::copy_options::overwrite_existing);
+
+        // Clean up temporary files only after successful copy
+        std::remove(tempScriptPath.c_str());
+        std::remove(tempDataPath.c_str());
+        std::remove(tempImagePath.c_str());
+        
+        return true;
+    }
+    catch (const std::exception& e) {
+        fl_alert("Failed to save plot: %s", e.what());
+        return false;
+    }
 }
 
 // PlotNavigator implementation
@@ -719,7 +651,8 @@ void PlotNavigator::createPlot(const std::shared_ptr<DataFrame>& data,
         log_debug("Scatter plot data size - Actual: " + std::to_string(actual.size()) + 
                  ", Predicted: " + std::to_string(predictedVec.size()));
         
-        plot->createScatterPlot(actual, predictedVec, "Actual Values", "Predicted Values", title);
+        plot->createScatterPlot(actual, predictedVec, "Actual Values", "Predicted Values", title,
+                               "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
     }
     else if (plotType == "timeseries") {
         std::vector<double> actual = data->getColumn(model->getTargetName());
@@ -730,14 +663,15 @@ void PlotNavigator::createPlot(const std::shared_ptr<DataFrame>& data,
         log_debug("Time series plot data size - Actual: " + std::to_string(actual.size()) + 
                  ", Predicted: " + std::to_string(predictedVec.size()));
         
-        plot->createTimeseriesPlot(actual, predictedVec, title);
+        plot->createTimeseriesPlot(actual, predictedVec, title,
+                                   "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
     }
     else if (plotType == "importance") {
         auto importance = model->getFeatureImportance();
         
         log_debug("Feature importance plot - Number of features: " + std::to_string(importance.size()));
         
-        plot->createImportancePlot(importance, title);
+        plot->createImportancePlot(importance, title, "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
     }
     
     log_debug("Adding plot to navigator");
@@ -827,9 +761,30 @@ void PlotNavigator::updateNavigationButtons()
     }
 }
 
+bool PlotNavigator::savePlotToFile(size_t index, const std::string& filename) {
+    if (index >= plots.size()) {
+        return false;
+    }
+
+    try {
+        // Create the directory if it doesn't exist
+        std::filesystem::path filePath(filename);
+        std::filesystem::create_directories(filePath.parent_path());
+
+        // Save the plot using matplotlib's savefig
+        plots[index]->savePlot(filename);
+        return true;
+    }
+    catch (const std::exception& e) {
+        fl_alert("Failed to save plot: %s", e.what());
+        return false;
+    }
+}
+
 // ResultsView implementation
 ResultsView::ResultsView(int x, int y, int w, int h)
-    : Fl_Group(x, y, w, h)
+    : Fl_Group(x, y, w, h),
+      exportDialog(std::make_unique<ExportDialog>(400, 300, "Export Options"))
 {
     begin();
     
@@ -910,6 +865,11 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     exportButton->callback(exportButtonCallback_static, this);
     
     end();
+
+    // Initialize the export dialog
+    exportDialog->onExport = [this](const ExportDialog::ExportOptions& options) {
+        exportResults(options);
+    };
 }
 
 ResultsView::~ResultsView() {
@@ -972,7 +932,13 @@ void ResultsView::handleBackButton() {
 }
 
 void ResultsView::handleExportButton() {
-    exportResults();
+    if (!model || !dataFrame) {
+        fl_alert("No model or data available to export!");
+        return;
+    }
+
+    exportDialog->setModel(model);
+    exportDialog->show();
 }
 
 void ResultsView::updateParametersDisplay() {
@@ -1148,128 +1114,96 @@ void ResultsView::createPlots()
     plotNavigator->createPlot(dataFrame, model, "importance", "Feature Importance");
 }
 
-void ResultsView::exportResults() {
-    if (!model || !dataFrame) {
+void ResultsView::exportResults(const ExportDialog::ExportOptions& options) {
+    if (!model || !dataFrame || options.exportPath.empty()) {
         return;
     }
-    
-    // Show file dialog to get save location
-    const char* fileName = fl_file_chooser("Export Results", "*.txt", "regression_results.txt");
-    if (!fileName) {
-        return;
-    }
+
+    std::filesystem::path exportDir(options.exportPath);
     
     try {
-        // Open file for writing
-        std::ofstream file(fileName);
-        
-        if (!file.is_open()) {
-            fl_alert("Failed to open file for writing");
-            return;
-        }
-        
-        // Write model information
-        file << "Model: " << model->getName() << std::endl;
-        file << "Description: " << model->getDescription() << std::endl;
-        file << std::endl;
-        
-        // Write parameters with improved formatting
-        file << "Model Parameters:" << std::endl;
-        file << "----------------" << std::endl;
-        auto parameters = model->getParameters();
-        
-        // First write the intercept
-        auto it = parameters.find("intercept");
-        if (it != parameters.end()) {
-            file << "Intercept: " << std::fixed << std::setprecision(6) << it->second << std::endl;
-        }
-        
-        // Then write the coefficients in a more readable way
-        file << std::endl << "Coefficients:" << std::endl;
-        for (const auto& param : parameters) {
-            if (param.first != "intercept") {
-                file << param.first << ": " << std::fixed << std::setprecision(6) << param.second << std::endl;
+        // Export model summary if selected
+        if (options.modelSummary) {
+            std::filesystem::path summaryPath = exportDir / "model_summary.txt";
+            std::ofstream file(summaryPath);
+            
+            if (!file.is_open()) {
+                fl_alert("Failed to open summary file for writing");
+                return;
             }
-        }
-        file << std::endl;
-        
-        // Write the regression equation
-        file << "Regression Equation:" << std::endl;
-        file << "-------------------" << std::endl;
-        file << model->getTargetName() << " = ";
-        
-        bool firstTerm = true;
-        it = parameters.find("intercept");
-        if (it != parameters.end()) {
-            file << std::fixed << std::setprecision(4) << it->second;
-            firstTerm = false;
-        }
-        
-        for (const auto& varName : model->getVariableNames()) {
-            auto coefIt = parameters.find(varName);
-            if (coefIt != parameters.end()) {
-                double coef = coefIt->second;
-                if (coef >= 0 && !firstTerm) {
-                    file << " + ";
-                } else if (coef < 0) {
-                    file << " - ";
-                    coef = -coef; // Make positive for display
+            
+            // Write model information
+            file << "Model: " << model->getName() << std::endl;
+            file << "Description: " << model->getDescription() << std::endl;
+            file << std::endl;
+            
+            // Write parameters with improved formatting
+            file << "Model Parameters:" << std::endl;
+            file << "----------------" << std::endl;
+            auto parameters = model->getParameters();
+            
+            // First write the intercept
+            auto it = parameters.find("intercept");
+            if (it != parameters.end()) {
+                file << "Intercept: " << std::fixed << std::setprecision(6) << it->second << std::endl;
+            }
+            
+            // Then write the coefficients
+            file << std::endl << "Coefficients:" << std::endl;
+            for (const auto& param : parameters) {
+                if (param.first != "intercept") {
+                    file << param.first << ": " << std::fixed << std::setprecision(6) << param.second << std::endl;
                 }
-                
-                file << std::fixed << std::setprecision(4) << coef << " * " << varName;
-                firstTerm = false;
+            }
+            file << std::endl;
+            
+            // Write model statistics
+            file << "Model Statistics:" << std::endl;
+            file << "----------------" << std::endl;
+            auto stats = model->getStatistics();
+            for (const auto& stat : stats) {
+                file << stat.first << ": " << std::fixed << std::setprecision(6) << stat.second << std::endl;
             }
         }
-        file << std::endl << std::endl;
-        
-        // Write statistics
-        file << "Model Statistics:" << std::endl;
-        file << "---------------" << std::endl;
-        auto statistics = model->getStatistics();
-        
-        // Format certain statistics nicely
-        auto r2 = statistics.find("r_squared");
-        if (r2 != statistics.end()) {
-            file << "R² (coefficient of determination): " << std::fixed << std::setprecision(4) << r2->second << std::endl;
-        }
-        
-        auto adj_r2 = statistics.find("adjusted_r_squared");
-        if (adj_r2 != statistics.end()) {
-            file << "Adjusted R²: " << std::fixed << std::setprecision(4) << adj_r2->second << std::endl;
-        }
-        
-        auto rmse = statistics.find("rmse");
-        if (rmse != statistics.end()) {
-            file << "RMSE (root mean squared error): " << std::fixed << std::setprecision(4) << rmse->second << std::endl;
-        }
-        
-        // Include other statistics
-        for (const auto& stat : statistics) {
-            if (stat.first != "r_squared" && stat.first != "adjusted_r_squared" && stat.first != "rmse") {
-                file << stat.first << ": " << stat.second << std::endl;
+
+        // Export predicted values if selected
+        if (options.predictedValues) {
+            std::filesystem::path csvPath = exportDir / "predicted_values.csv";
+            std::ofstream file(csvPath);
+            
+            if (!file.is_open()) {
+                fl_alert("Failed to open CSV file for writing");
+                return;
+            }
+            
+            // Write header
+            file << "Actual," << model->getTargetName() << "_predicted" << std::endl;
+            
+            // Get actual values and calculate predictions
+            const auto& actualValues = dataFrame->getColumn(model->getTargetName());
+            Eigen::MatrixXd X = dataFrame->toMatrix(model->getVariableNames());
+            Eigen::VectorXd predicted = model->predict(X);
+            
+            // Write data
+            for (size_t i = 0; i < actualValues.size(); ++i) {
+                file << actualValues[i] << "," << predicted(i) << std::endl;
             }
         }
-        file << std::endl;
-        
-        // Write variable information
-        file << "Variables:" << std::endl;
-        file << "----------" << std::endl;
-        file << "Target Variable: " << model->getTargetName() << std::endl;
-        file << "Input Variables: ";
-        const auto& varNames = model->getVariableNames();
-        for (size_t i = 0; i < varNames.size(); ++i) {
-            file << varNames[i];
-            if (i < varNames.size() - 1) {
-                file << ", ";
-            }
+
+        // Export plots if selected
+        if (options.scatterPlot) {
+            plotNavigator->savePlotToFile(0, (exportDir / "scatter_plot.png").string());
         }
-        file << std::endl;
-        
-        // Close file
-        file.close();
-        
-        fl_message("Results exported successfully");
-    } catch (const std::exception& e) {
-        fl_alert("Failed to export results: %s", e.what());
+        if (options.linePlot) {
+            plotNavigator->savePlotToFile(1, (exportDir / "line_plot.png").string());
+        }
+        if (options.importancePlot) {
+            plotNavigator->savePlotToFile(2, (exportDir / "importance_plot.png").string());
+        }
+
+        fl_message("Results exported successfully to:\n%s", options.exportPath.c_str());
+    }
+    catch (const std::exception& e) {
+        fl_alert("Error exporting results: %s", e.what());
     }
 }

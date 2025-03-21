@@ -10,11 +10,14 @@
 #include <functional>
 #include <sstream>
 #include <iomanip>
+#include <unordered_map>
 
 #include "data/DataFrame.h"
 #include "models/Model.h"
+#include "gui/ExportDialog.h"
+#include "gui/DataTable.h"
 
-// Forward declaration of the plotting widget
+// Forward declarations
 class PlotWidget;
 
 /**
@@ -52,6 +55,15 @@ public:
      * @brief Clear all plots
      */
     void clearPlots();
+
+    /**
+     * @brief Save a specific plot to a file
+     * 
+     * @param index Index of the plot to save
+     * @param filename Path where to save the plot
+     * @return bool True if successful, false otherwise
+     */
+    bool savePlotToFile(size_t index, const std::string& filename);
 
 private:
     std::vector<PlotWidget*> plots;
@@ -116,11 +128,26 @@ public:
     std::string getEquationString() const;
 
 private:
+    // Static callbacks for FLTK
+    static void backButtonCallback_static(Fl_Widget* widget, void* userData);
+    static void exportButtonCallback_static(Fl_Widget* widget, void* userData);
+    
+    // Member functions
+    void handleBackButton();
+    void handleExportButton();
+    void updateParametersDisplay();
+    void updateStatisticsDisplay();
+    void createPlots();
+    void exportResults(const ExportDialog::ExportOptions& options);
+
+    // Data members
     std::shared_ptr<Model> model;
     std::shared_ptr<DataFrame> dataFrame;
     std::vector<std::string> inputVariables;
     std::string targetVariable;
+    std::function<void()> backButtonCallback;
 
+    // UI Elements
     Fl_Box* modelTitleLabel;
     Fl_Box* equationDisplay;
     Fl_Group* parametersGroup;
@@ -128,42 +155,9 @@ private:
     PlotNavigator* plotNavigator;
     Fl_Button* backButton;
     Fl_Button* exportButton;
-    
-    std::function<void()> backButtonCallback;
-
-    // Static callbacks for FLTK
-    static void backButtonCallback_static(Fl_Widget* widget, void* userData);
-    static void exportButtonCallback_static(Fl_Widget* widget, void* userData);
-    
-    /**
-     * @brief Handle back button click
-     */
-    void handleBackButton();
-    
-    /**
-     * @brief Handle export button click
-     */
-    void handleExportButton();
-
-    /**
-     * @brief Update the parameters display
-     */
-    void updateParametersDisplay();
-
-    /**
-     * @brief Update the statistics display
-     */
-    void updateStatisticsDisplay();
-
-    /**
-     * @brief Create all plots for the current model
-     */
-    void createPlots();
-
-    /**
-     * @brief Export results to a file
-     */
-    void exportResults();
+    DataTable* parametersTable;
+    DataTable* statisticsTable;
+    std::unique_ptr<ExportDialog> exportDialog;
 };
 
 /**
@@ -184,12 +178,18 @@ public:
      * @param xLabel Label for x-axis
      * @param yLabel Label for y-axis
      * @param title Title of the plot
+     * @param tempDataPath Path for temporary data file
+     * @param tempImagePath Path for temporary image file
+     * @param tempScriptPath Path for temporary script file
      */
     void createScatterPlot(const std::vector<double>& actualValues,
                           const std::vector<double>& predictedValues,
                           const std::string& xLabel,
                           const std::string& yLabel,
-                          const std::string& title);
+                          const std::string& title,
+                          const std::string& tempDataPath = "temp_plot_data.csv",
+                          const std::string& tempImagePath = "temp_plot_image.png",
+                          const std::string& tempScriptPath = "temp_plot_script.py");
 
     /**
      * @brief Create a time series plot
@@ -197,19 +197,39 @@ public:
      * @param actualValues Actual values
      * @param predictedValues Predicted values
      * @param title Title of the plot
+     * @param tempDataPath Path for temporary data file
+     * @param tempImagePath Path for temporary image file
+     * @param tempScriptPath Path for temporary script file
      */
     void createTimeseriesPlot(const std::vector<double>& actualValues,
                              const std::vector<double>& predictedValues,
-                             const std::string& title);
+                             const std::string& title,
+                             const std::string& tempDataPath = "temp_plot_data.csv",
+                             const std::string& tempImagePath = "temp_plot_image.png",
+                             const std::string& tempScriptPath = "temp_plot_script.py");
 
     /**
      * @brief Create a feature importance plot
      * 
      * @param importance Map of feature names to importance scores
      * @param title Title of the plot
+     * @param tempDataPath Path for temporary data file
+     * @param tempImagePath Path for temporary image file
+     * @param tempScriptPath Path for temporary script file
      */
     void createImportancePlot(const std::unordered_map<std::string, double>& importance,
-                             const std::string& title);
+                             const std::string& title,
+                             const std::string& tempDataPath = "temp_plot_data.csv",
+                             const std::string& tempImagePath = "temp_plot_image.png",
+                             const std::string& tempScriptPath = "temp_plot_script.py");
+
+    /**
+     * @brief Save the current plot to a file
+     * 
+     * @param filename Path where to save the plot
+     * @return bool True if successful, false otherwise
+     */
+    bool savePlot(const std::string& filename);
 
 protected:
     /**
@@ -223,10 +243,18 @@ protected:
     void resize(int x, int y, int w, int h) override;
 
 private:
+    static void resizeTimeoutCallback(void* v);
+    void regeneratePlot();
+    bool createTempDataFile(const std::string& data, const std::string& filename);
+
     Fl_Box* plotBox;
     char* plotImageData;
     int plotImageWidth;
     int plotImageHeight;
+    bool resizeTimerActive;
+    int pendingWidth;
+    int pendingHeight;
+    static constexpr double RESIZE_DELAY = 0.2; // seconds
 
     // Store plot data for regeneration on resize
     enum class PlotType {
@@ -238,63 +266,8 @@ private:
     PlotType currentPlotType;
     std::vector<double> storedActualValues;
     std::vector<double> storedPredictedValues;
-    std::unordered_map<std::string, double> storedImportance;
     std::string storedXLabel;
     std::string storedYLabel;
     std::string storedTitle;
-
-    // Resize handling
-    static void resizeTimeoutCallback(void* v);
-    static constexpr double RESIZE_DELAY = 0.2; // 200ms delay
-    bool resizeTimerActive;
-    int pendingWidth;
-    int pendingHeight;
-
-    /**
-     * @brief Regenerate the current plot with new dimensions
-     */
-    void regeneratePlot();
-
-    /**
-     * @brief Generate a plot using matplotlib-cpp
-     * 
-     * @param command Python command to generate the plot
-     * @return bool True if plot was generated successfully
-     */
-    bool generatePlot(const std::string& command);
-
-    /**
-     * @brief Create a temporary file with plot data
-     * 
-     * @param data Data to write to file
-     * @param filename Name of the temporary file
-     * @return bool True if file was created successfully
-     */
-    bool createTempDataFile(const std::string& data, const std::string& filename);
-};
-
-/**
- * @brief Custom table to display parameters and statistics
- */
-class DataTable : public Fl_Table {
-public:
-    DataTable(int x, int y, int w, int h, const char* label = 0);
-    ~DataTable();
-    
-    /**
-     * @brief Set the data for the table
-     * 
-     * @param data Map of names to values
-     */
-    void setData(const std::unordered_map<std::string, double>& data);
-    
-protected:
-    /**
-     * @brief Draw a cell
-     */
-    void draw_cell(TableContext context, int row, int col, int x, int y, int w, int h) override;
-    
-private:
-    std::vector<std::string> names;
-    std::vector<double> values;
+    std::unordered_map<std::string, double> storedImportance;
 };
