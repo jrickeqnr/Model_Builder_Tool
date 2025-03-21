@@ -16,9 +16,19 @@
 #include <chrono>
 #include <ctime>
 
-// Add logging function
+// Add logging function with file clearing on first use
 void log_debug(const std::string& message) {
-    std::ofstream logFile("debug.log", std::ios::app);
+    static bool first_call = true;
+    std::ofstream logFile;
+    
+    if (first_call) {
+        // Clear the file on first use
+        logFile.open("debug.log", std::ios::out | std::ios::trunc);
+        first_call = false;
+    } else {
+        logFile.open("debug.log", std::ios::app);
+    }
+    
     auto now = std::chrono::system_clock::now();
     auto now_c = std::chrono::system_clock::to_time_t(now);
     logFile << std::ctime(&now_c) << message << std::endl;
@@ -112,7 +122,8 @@ void DataTable::draw_cell(TableContext context, int row, int col, int x, int y, 
 
 // PlotWidget implementation
 PlotWidget::PlotWidget(int x, int y, int w, int h)
-    : Fl_Group(x, y, w, h), plotImageData(nullptr), plotImageWidth(0), plotImageHeight(0)
+    : Fl_Group(x, y, w, h), plotImageData(nullptr), plotImageWidth(0), plotImageHeight(0),
+      currentPlotType(PlotType::None)
 {
     box(FL_DOWN_BOX);
     color(FL_WHITE);
@@ -144,11 +155,49 @@ void PlotWidget::draw() {
     }
 }
 
+void PlotWidget::resize(int x, int y, int w, int h) {
+    // Call base class resize
+    Fl_Group::resize(x, y, w, h);
+    
+    // Resize the plot box
+    plotBox->resize(x, y, w, h);
+    
+    // Regenerate the plot with new dimensions if we have data
+    if (currentPlotType != PlotType::None) {
+        regeneratePlot();
+    }
+}
+
+void PlotWidget::regeneratePlot() {
+    switch (currentPlotType) {
+        case PlotType::Scatter:
+            createScatterPlot(storedActualValues, storedPredictedValues, 
+                            storedXLabel, storedYLabel, storedTitle);
+            break;
+        case PlotType::Timeseries:
+            createTimeseriesPlot(storedActualValues, storedPredictedValues, storedTitle);
+            break;
+        case PlotType::Importance:
+            createImportancePlot(storedImportance, storedTitle);
+            break;
+        case PlotType::None:
+            break;
+    }
+}
+
 void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
-        const std::vector<double>& predictedValues,
-        const std::string& xLabel,
-        const std::string& yLabel,
-        const std::string& title) {
+                                 const std::vector<double>& predictedValues,
+                                 const std::string& xLabel,
+                                 const std::string& yLabel,
+                                 const std::string& title) {
+    // Store data for regeneration
+    currentPlotType = PlotType::Scatter;
+    storedActualValues = actualValues;
+    storedPredictedValues = predictedValues;
+    storedXLabel = xLabel;
+    storedYLabel = yLabel;
+    storedTitle = title;
+
     // Create temporary file paths
     std::string tempDataPath = "temp_plot_data.csv";
     std::string tempImagePath = "temp_plot_image.png";
@@ -170,8 +219,9 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
     }
     dataFile.close();
 
-    log_debug("Data file created successfully with " + 
-              std::to_string(std::min(actualValues.size(), predictedValues.size())) + " points");
+    // Calculate figure size based on widget dimensions
+    double figWidth = w() / 100.0;  // Convert pixels to inches (assuming 100 DPI)
+    double figHeight = h() / 100.0;
 
     // Create plotting script
     std::ofstream scriptFile(tempScriptPath);
@@ -195,10 +245,10 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
     scriptFile << "print('Data ranges - Actual:', actual.min(), 'to', actual.max())\n";
     scriptFile << "print('Data ranges - Predicted:', predicted.min(), 'to', predicted.max())\n\n";
 
-    // Create plot with adjusted dimensions
+    // Create plot with dimensions based on widget size
     scriptFile << "# Create plot\n";
-    scriptFile << "plt.figure(figsize=(4.1, 3.6), dpi=100)\n";  // Adjusted to match widget size
-    scriptFile << "plt.scatter(actual, predicted, alpha=0.7, s=30)\n";  // Reduced marker size
+    scriptFile << "plt.figure(figsize=(" << figWidth << ", " << figHeight << "), dpi=100)\n";
+    scriptFile << "plt.scatter(actual, predicted, alpha=0.7, s=30)\n";
     scriptFile << "print('Scatter plot created')\n\n";
 
     // Add perfect prediction line
@@ -219,12 +269,11 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
     // Save plot
     scriptFile << "# Save plot\n";
     scriptFile << "plt.tight_layout()\n";
-    scriptFile << "plt.savefig('" << tempImagePath << "', format='png')\n";
+    scriptFile << "plt.savefig('" << tempImagePath << "', format='png', bbox_inches='tight')\n";
     scriptFile << "print('Plot saved as:', '" << tempImagePath << "')\n";
     scriptFile << "plt.close()\n";
 
     scriptFile.close();
-    log_debug("Python script created successfully");
 
     // Execute Python script
     std::string command = "python " + tempScriptPath + " 2>&1";
@@ -311,8 +360,13 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
 
 void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
                                     const std::vector<double>& predictedValues,
-                                    const std::string& title)
-{
+                                    const std::string& title) {
+    // Store data for regeneration
+    currentPlotType = PlotType::Timeseries;
+    storedActualValues = actualValues;
+    storedPredictedValues = predictedValues;
+    storedTitle = title;
+
     // Create temporary file paths
     std::string tempDataPath = "temp_plot_data.csv";
     std::string tempImagePath = "temp_plot_image.png";
@@ -331,6 +385,10 @@ void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
     }
     dataFile.close();
 
+    // Calculate figure size based on widget dimensions
+    double figWidth = w() / 100.0;  // Convert pixels to inches (assuming 100 DPI)
+    double figHeight = h() / 100.0;
+
     // Create plotting script
     std::ofstream scriptFile(tempScriptPath);
     if (!scriptFile.is_open()) {
@@ -346,9 +404,9 @@ void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
     scriptFile << "# Read data\n";
     scriptFile << "data = pd.read_csv('" << tempDataPath << "')\n\n";
 
-    // Create plot with adjusted dimensions
+    // Create plot with dimensions based on widget size
     scriptFile << "# Create plot\n";
-    scriptFile << "plt.figure(figsize=(4.1, 3.6), dpi=100)\n";  // Adjusted to match widget size
+    scriptFile << "plt.figure(figsize=(" << figWidth << ", " << figHeight << "), dpi=100)\n";
     scriptFile << "plt.plot(data['index'], data['actual'], label='Actual', alpha=0.7, linewidth=1)\n";
     scriptFile << "plt.plot(data['index'], data['predicted'], label='Predicted', alpha=0.7, linewidth=1)\n\n";
 
@@ -365,7 +423,7 @@ void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
     // Save plot
     scriptFile << "# Save plot\n";
     scriptFile << "plt.tight_layout()\n";
-    scriptFile << "plt.savefig('" << tempImagePath << "', format='png')\n";
+    scriptFile << "plt.savefig('" << tempImagePath << "', format='png', bbox_inches='tight')\n";
     scriptFile << "plt.close()\n";
 
     scriptFile.close();
@@ -435,8 +493,12 @@ void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
 }
 
 void PlotWidget::createImportancePlot(const std::unordered_map<std::string, double>& importance,
-                                    const std::string& title)
-{
+                                    const std::string& title) {
+    // Store data for regeneration
+    currentPlotType = PlotType::Importance;
+    storedImportance = importance;
+    storedTitle = title;
+
     // Create temporary file paths
     std::string tempDataPath = "temp_plot_data.csv";
     std::string tempImagePath = "temp_plot_image.png";
@@ -455,6 +517,10 @@ void PlotWidget::createImportancePlot(const std::unordered_map<std::string, doub
     }
     dataFile.close();
 
+    // Calculate figure size based on widget dimensions
+    double figWidth = w() / 100.0;  // Convert pixels to inches (assuming 100 DPI)
+    double figHeight = h() / 100.0;
+
     // Create plotting script
     std::ofstream scriptFile(tempScriptPath);
     if (!scriptFile.is_open()) {
@@ -471,11 +537,11 @@ void PlotWidget::createImportancePlot(const std::unordered_map<std::string, doub
     scriptFile << "data = pd.read_csv('" << tempDataPath << "')\n";
     scriptFile << "data = data.sort_values('importance', ascending=True)\n\n";
 
-    // Create plot with adjusted dimensions
+    // Create plot with dimensions based on widget size
     scriptFile << "# Create plot\n";
-    scriptFile << "plt.figure(figsize=(4.1, 3.6), dpi=100)\n";  // Adjusted to match widget size
+    scriptFile << "plt.figure(figsize=(" << figWidth << ", " << figHeight << "), dpi=100)\n";
     scriptFile << "y_pos = np.arange(len(data['feature']))\n";
-    scriptFile << "plt.barh(y_pos, data['importance'], align='center', height=0.5)\n";  // Adjusted bar height
+    scriptFile << "plt.barh(y_pos, data['importance'], align='center', height=0.5)\n";
     scriptFile << "plt.yticks(y_pos, data['feature'], fontsize=8)\n\n";
 
     // Set labels and title with adjusted font sizes
@@ -485,9 +551,9 @@ void PlotWidget::createImportancePlot(const std::unordered_map<std::string, doub
     scriptFile << "plt.xticks(fontsize=8)\n";
     scriptFile << "plt.grid(True, linestyle='--', alpha=0.7)\n\n";
 
-    // Add tight layout with adjusted margins
-    scriptFile << "# Adjust layout\n";
-    scriptFile << "plt.tight_layout(pad=0.5)\n";  // Reduced padding
+    // Save plot
+    scriptFile << "# Save plot\n";
+    scriptFile << "plt.tight_layout(pad=0.5)\n";
     scriptFile << "plt.savefig('" << tempImagePath << "', format='png', bbox_inches='tight')\n";
     scriptFile << "plt.close()\n";
 

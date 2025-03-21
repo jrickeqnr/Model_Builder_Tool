@@ -217,11 +217,36 @@ protected:
      */
     void draw() override;
 
+    /**
+     * @brief Handle resize events
+     */
+    void resize(int x, int y, int w, int h) override;
+
 private:
     Fl_Box* plotBox;
     char* plotImageData;
     int plotImageWidth;
     int plotImageHeight;
+
+    // Store plot data for regeneration on resize
+    enum class PlotType {
+        None,
+        Scatter,
+        Timeseries,
+        Importance
+    };
+    PlotType currentPlotType;
+    std::vector<double> storedActualValues;
+    std::vector<double> storedPredictedValues;
+    std::unordered_map<std::string, double> storedImportance;
+    std::string storedXLabel;
+    std::string storedYLabel;
+    std::string storedTitle;
+
+    /**
+     * @brief Regenerate the current plot with new dimensions
+     */
+    void regeneratePlot();
 
     /**
      * @brief Generate a plot using matplotlib-cpp
