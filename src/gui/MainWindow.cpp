@@ -62,6 +62,16 @@ MainWindow::MainWindow(int width, int height, const char* title)
         this->handleBackButton();
     });
     
+    hyperparameterSelector = new HyperparameterSelector(panelX, panelY, panelW, panelH);
+    hyperparameterSelector->setHyperparametersSelectedCallback(
+        [this](const std::unordered_map<std::string, std::string>& hyperparams) {
+            this->handleHyperparametersSelected(hyperparams);
+        }
+    );
+    hyperparameterSelector->setBackButtonCallback([this]() {
+        this->handleBackButton();
+    });
+    
     variableSelector = new VariableSelector(panelX, panelY, panelW, panelH);
     variableSelector->setVariablesSelectedCallback(
         [this](const std::vector<std::string>& inputVars, const std::string& targetVar) {
@@ -79,6 +89,7 @@ MainWindow::MainWindow(int width, int height, const char* title)
     
     // Hide all panels except file selector initially
     modelSelector->hide();
+    hyperparameterSelector->hide();
     variableSelector->hide();
     resultsView->hide();
     
@@ -125,7 +136,22 @@ void MainWindow::handleFileSelected(const std::string& filePath) {
 void MainWindow::handleModelSelected(const std::string& modelType) {
     currentModelType = modelType;
     
-    // Move to next step
+    // Move to hyperparameter selection for models that have hyperparameters
+    if (modelType != "Linear Regression") {
+        currentState = State::HyperparameterSelection;
+        hyperparameterSelector->setModelType(modelType);
+    } else {
+        // Linear Regression has no hyperparameters, skip to variable selection
+        currentState = State::VariableSelection;
+    }
+    
+    updateUI();
+}
+
+void MainWindow::handleHyperparametersSelected(const std::unordered_map<std::string, std::string>& hyperparams) {
+    currentHyperparameters = hyperparams;
+    
+    // Move to variable selection
     currentState = State::VariableSelection;
     updateUI();
 }
@@ -141,6 +167,13 @@ void MainWindow::handleVariablesSelected(const std::vector<std::string>& inputVa
         fl_alert("Failed to create model");
         return;
     }
+    
+    // Update status message with model type and hyperparameters if any
+    std::string statusMsg = "Using " + currentModelType;
+    if (currentHyperparameters.size() > 0 && currentModelType != "Linear Regression") {
+        statusMsg += " with custom hyperparameters";
+    }
+    statusBar->label(statusMsg.c_str());
     
     // Fit model
     try {
@@ -194,9 +227,17 @@ void MainWindow::handleBackButton() {
         case State::ModelSelection:
             currentState = State::FileSelection;
             break;
+        
+        case State::HyperparameterSelection:
+            currentState = State::ModelSelection;
+            break;
             
         case State::VariableSelection:
-            currentState = State::ModelSelection;
+            if (currentModelType != "Linear Regression") {
+                currentState = State::HyperparameterSelection;
+            } else {
+                currentState = State::ModelSelection;
+            }
             break;
             
         case State::Results:
@@ -216,6 +257,7 @@ void MainWindow::handleStartOver() {
     // Clear selections
     currentFilePath.clear();
     currentModelType.clear();
+    currentHyperparameters.clear();
     selectedInputVariables.clear();
     selectedTargetVariable.clear();
     
@@ -228,6 +270,7 @@ void MainWindow::updateUI() {
     // Hide all panels
     fileSelector->hide();
     modelSelector->hide();
+    hyperparameterSelector->hide();
     variableSelector->hide();
     resultsView->hide();
     
@@ -245,8 +288,18 @@ void MainWindow::updateUI() {
             currentPanel = modelSelector;
             break;
             
+        case State::HyperparameterSelection:
+            headerLabel->label("Step 3: Configure Hyperparameters");
+            hyperparameterSelector->show();
+            currentPanel = hyperparameterSelector;
+            break;
+            
         case State::VariableSelection:
-            headerLabel->label("Step 3: Select Variables");
+            if (currentModelType != "Linear Regression") {
+                headerLabel->label("Step 4: Select Variables");
+            } else {
+                headerLabel->label("Step 3: Select Variables");
+            }
             variableSelector->show();
             if (dataFrame) {
                 variableSelector->setAvailableVariables(dataFrame->getColumnNames());
@@ -269,9 +322,48 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
     if (modelType == "Linear Regression") {
         return std::make_shared<LinearRegression>();
     }
+    else if (modelType == "ElasticNet") {
+        // In a real implementation, we would create an ElasticNet model class
+        // and pass the hyperparameters to the constructor
+        // For now, we'll return a LinearRegression as a placeholder
+        auto linearModel = std::make_shared<LinearRegression>();
+        // In a real implementation, we would set the hyperparameters here
+        return linearModel;
+    }
+    else if (modelType == "XGBoost") {
+        // In a real implementation, we would create an XGBoost model class
+        // and pass the hyperparameters to the constructor
+        // For now, we'll return a LinearRegression as a placeholder
+        auto linearModel = std::make_shared<LinearRegression>();
+        // In a real implementation, we would set the hyperparameters here
+        return linearModel;
+    }
+    else if (modelType == "Random Forest") {
+        // In a real implementation, we would create a RandomForest model class
+        // and pass the hyperparameters to the constructor
+        // For now, we'll return a LinearRegression as a placeholder
+        auto linearModel = std::make_shared<LinearRegression>();
+        // In a real implementation, we would set the hyperparameters here
+        return linearModel;
+    }
+    else if (modelType == "Neural Network") {
+        // In a real implementation, we would create a NeuralNetwork model class
+        // and pass the hyperparameters to the constructor
+        // For now, we'll return a LinearRegression as a placeholder
+        auto linearModel = std::make_shared<LinearRegression>();
+        // In a real implementation, we would set the hyperparameters here
+        return linearModel;
+    }
+    else if (modelType == "Gradient Boosting") {
+        // In a real implementation, we would create a GradientBoosting model class
+        // and pass the hyperparameters to the constructor
+        // For now, we'll return a LinearRegression as a placeholder
+        auto linearModel = std::make_shared<LinearRegression>();
+        // In a real implementation, we would set the hyperparameters here
+        return linearModel;
+    }
     
-    // More models can be added here
-    
+    // Unknown model type
     return nullptr;
 }
 

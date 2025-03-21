@@ -41,6 +41,7 @@ set(SOURCES
     src/gui/ResultsView.cpp
     src/gui/ExportDialog.cpp
     src/gui/DataTable.cpp
+    src/gui/HyperparameterSelector.cpp
     src/models/LinearRegression.cpp
     src/data/CSVReader.cpp
     src/data/DataFrame.cpp

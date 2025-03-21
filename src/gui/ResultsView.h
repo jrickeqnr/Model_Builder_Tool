@@ -222,6 +222,72 @@ public:
                              const std::string& tempDataPath = "temp_plot_data.csv",
                              const std::string& tempImagePath = "temp_plot_image.png",
                              const std::string& tempScriptPath = "temp_plot_script.py");
+    
+    /**
+     * @brief Create a residual plot
+     * 
+     * @param actualValues Actual values
+     * @param predictedValues Predicted values
+     * @param title Title of the plot
+     * @param tempDataPath Path for temporary data file
+     * @param tempImagePath Path for temporary image file
+     * @param tempScriptPath Path for temporary script file
+     */
+    void createResidualPlot(const std::vector<double>& actualValues,
+                           const std::vector<double>& predictedValues,
+                           const std::string& title,
+                           const std::string& tempDataPath = "temp_plot_data.csv",
+                           const std::string& tempImagePath = "temp_plot_image.png",
+                           const std::string& tempScriptPath = "temp_plot_script.py");
+    
+    /**
+     * @brief Create a learning curve plot 
+     * 
+     * @param trainingScores Vector of training scores at different sizes
+     * @param validationScores Vector of validation scores at different sizes
+     * @param trainingSizes Vector of training set sizes
+     * @param title Title of the plot
+     * @param tempDataPath Path for temporary data file
+     * @param tempImagePath Path for temporary image file
+     * @param tempScriptPath Path for temporary script file
+     */
+    void createLearningCurvePlot(const std::vector<double>& trainingScores,
+                                const std::vector<double>& validationScores,
+                                const std::vector<int>& trainingSizes,
+                                const std::string& title,
+                                const std::string& tempDataPath = "temp_plot_data.csv",
+                                const std::string& tempImagePath = "temp_plot_image.png",
+                                const std::string& tempScriptPath = "temp_plot_script.py");
+    
+    /**
+     * @brief Create a neural network architecture visualization
+     * 
+     * @param layerSizes Vector of layer sizes (including input and output layers)
+     * @param title Title of the plot
+     * @param tempDataPath Path for temporary data file
+     * @param tempImagePath Path for temporary image file
+     * @param tempScriptPath Path for temporary script file
+     */
+    void createNeuralNetworkArchitecturePlot(const std::vector<int>& layerSizes,
+                                            const std::string& title,
+                                            const std::string& tempDataPath = "temp_plot_data.csv",
+                                            const std::string& tempImagePath = "temp_plot_image.png",
+                                            const std::string& tempScriptPath = "temp_plot_script.py");
+    
+    /**
+     * @brief Create a tree visualization for tree-based models
+     * 
+     * @param treeStructure String representation of tree structure
+     * @param title Title of the plot
+     * @param tempDataPath Path for temporary data file
+     * @param tempImagePath Path for temporary image file
+     * @param tempScriptPath Path for temporary script file
+     */
+    void createTreeVisualizationPlot(const std::string& treeStructure,
+                                    const std::string& title,
+                                    const std::string& tempDataPath = "temp_plot_data.csv",
+                                    const std::string& tempImagePath = "temp_plot_image.png",
+                                    const std::string& tempScriptPath = "temp_plot_script.py");
 
     /**
      * @brief Save the current plot to a file
@@ -261,7 +327,11 @@ private:
         None,
         Scatter,
         Timeseries,
-        Importance
+        Importance,
+        Residual,
+        LearningCurve,
+        NeuralNetworkArchitecture,
+        TreeVisualization
     };
     PlotType currentPlotType;
     std::vector<double> storedActualValues;

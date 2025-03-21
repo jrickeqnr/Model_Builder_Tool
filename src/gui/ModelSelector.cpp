@@ -21,6 +21,12 @@ ModelSelector::ModelSelector(int x, int y, int w, int h)
     
     // Add model options
     models.push_back("Linear Regression");
+    models.push_back("ElasticNet");
+    models.push_back("XGBoost");
+    models.push_back("Random Forest");
+    models.push_back("Neural Network");
+    models.push_back("Gradient Boosting");
+    
     for (const auto& model : models) {
         modelChoice->add(model.c_str());
     }
@@ -109,5 +115,89 @@ void ModelSelector::updateModelDescription(const std::string& modelName) {
             "- Root Mean Squared Error (RMSE)"
         );
     }
-    // Add more model descriptions as they are implemented
+    else if (modelName == "ElasticNet") {
+        modelDescriptionBox->label(
+            "ElasticNet Regression\n\n"
+            "ElasticNet combines L1 and L2 regularization to handle correlated variables "
+            "and prevent overfitting in regression models.\n\n"
+            "Key characteristics:\n"
+            "- Regularization technique that combines Lasso (L1) and Ridge (L2) penalties\n"
+            "- Good for datasets with correlated features\n"
+            "- Can perform feature selection by zeroing out less important features\n"
+            "- Balances between feature selection and coefficient shrinkage\n\n"
+            "Hyperparameters:\n"
+            "- Alpha: Controls the L1 vs L2 ratio (1 = Lasso, 0 = Ridge)\n"
+            "- Lambda: Overall regularization strength"
+        );
+    }
+    else if (modelName == "XGBoost") {
+        modelDescriptionBox->label(
+            "XGBoost (Extreme Gradient Boosting)\n\n"
+            "A high-performance implementation of gradient boosted decision trees "
+            "designed for speed and performance.\n\n"
+            "Key characteristics:\n"
+            "- Highly efficient and scalable implementation of gradient boosting\n"
+            "- Often winning solution in machine learning competitions\n"
+            "- Handles missing values automatically\n"
+            "- Includes regularization to prevent overfitting\n"
+            "- Parallel tree construction for faster training\n\n"
+            "Hyperparameters:\n"
+            "- Learning rate: Controls the contribution of each tree\n"
+            "- Max depth: Maximum depth of trees\n"
+            "- Number of estimators: Number of boosting rounds"
+        );
+    }
+    else if (modelName == "Random Forest") {
+        modelDescriptionBox->label(
+            "Random Forest Regression\n\n"
+            "An ensemble learning method that builds multiple decision trees and "
+            "merges their predictions to improve accuracy and control overfitting.\n\n"
+            "Key characteristics:\n"
+            "- Ensemble of decision trees trained on random subsets of data\n"
+            "- Handles high-dimensional data well\n"
+            "- Robust to outliers and non-linear data\n"
+            "- Provides feature importance measures\n"
+            "- Less prone to overfitting than single decision trees\n\n"
+            "Hyperparameters:\n"
+            "- Number of trees: More trees usually means better performance\n"
+            "- Max depth: Controls the maximum depth of each tree\n"
+            "- Min samples split/leaf: Controls the minimum number of samples required"
+        );
+    }
+    else if (modelName == "Neural Network") {
+        modelDescriptionBox->label(
+            "Neural Network Regression\n\n"
+            "A multilayer perceptron (MLP) for regression that can model complex "
+            "non-linear relationships in data.\n\n"
+            "Key characteristics:\n"
+            "- Can approximate any continuous function\n"
+            "- Effective for complex, high-dimensional data\n"
+            "- Automatically learns feature interactions\n"
+            "- Requires more data than traditional regression models\n"
+            "- May be more difficult to interpret\n\n"
+            "Hyperparameters:\n"
+            "- Hidden layer sizes: Number and size of hidden layers\n"
+            "- Activation function: Non-linear function applied at each neuron\n"
+            "- Learning rate: Controls the step size during optimization\n"
+            "- Batch size: Number of samples processed before model update"
+        );
+    }
+    else if (modelName == "Gradient Boosting") {
+        modelDescriptionBox->label(
+            "Gradient Boosting Regression\n\n"
+            "An ensemble technique that builds regression trees sequentially, with each "
+            "tree correcting the errors of its predecessors.\n\n"
+            "Key characteristics:\n"
+            "- Powerful technique for regression problems\n"
+            "- Builds trees sequentially to correct previous trees' errors\n"
+            "- Often better performance than random forests\n"
+            "- Can capture complex non-linear patterns\n"
+            "- Provides feature importance measures\n\n"
+            "Hyperparameters:\n"
+            "- Learning rate: Controls the contribution of each tree\n"
+            "- Number of estimators: Number of sequential trees\n"
+            "- Max depth: Maximum depth of each tree\n"
+            "- Subsample: Fraction of samples used for tree building"
+        );
+    }
 }

@@ -1095,23 +1095,103 @@ std::string ResultsView::getEquationString() const {
     return equation.str();
 }
 
-void ResultsView::createPlots()
-{
+void ResultsView::createPlots() {
     if (!model || !dataFrame) {
         return;
     }
-    
+
+    // Get actual and predicted values
+    Eigen::MatrixXd X = dataFrame->toMatrix(inputVariables);
+    Eigen::VectorXd y = Eigen::Map<Eigen::VectorXd>(
+        dataFrame->getColumn(targetVariable).data(),
+        dataFrame->getColumn(targetVariable).size()
+    );
+    Eigen::VectorXd predictions = model->predict(X);
+
+    // Convert Eigen vectors to std::vector
+    std::vector<double> actualValues(y.data(), y.data() + y.size());
+    std::vector<double> predictedValues(predictions.data(), predictions.data() + predictions.size());
+
     // Clear existing plots
     plotNavigator->clearPlots();
+
+    // Create standard plots for all models
+    plotNavigator->createPlot(
+        dataFrame, model,
+        "scatter", 
+        "Actual vs. Predicted Values"
+    );
+
+    plotNavigator->createPlot(
+        dataFrame, model,
+        "importance", 
+        "Feature Importance"
+    );
     
-    // Create scatter plot
-    plotNavigator->createPlot(dataFrame, model, "scatter", "Actual vs. Predicted Values");
+    plotNavigator->createPlot(
+        dataFrame, model,
+        "residual", 
+        "Residual Plot"
+    );
+
+    // Add model-specific plots
+    std::string modelName = model->getName();
     
-    // Create time series plot
-    plotNavigator->createPlot(dataFrame, model, "timeseries", "Time Series of Actual and Predicted Values");
+    if (modelName == "Neural Network") {
+        // For neural networks, add architecture diagram
+        // We would need to extract layer sizes from the model
+        std::vector<int> layerSizes;
+        
+        // Check if we can get the layer sizes from hyperparameters
+        auto params = model->getParameters();
+        auto hiddenLayersIt = params.find("hidden_layer_sizes");
+        
+        if (hiddenLayersIt != params.end()) {
+            // Parse the hidden layer sizes
+            std::string hiddenLayers = std::to_string(hiddenLayersIt->second);
+            std::stringstream ss(hiddenLayers);
+            std::string layer;
+            
+            // Add input layer size (number of features)
+            layerSizes.push_back(inputVariables.size());
+            
+            // Parse comma-separated hidden layer sizes
+            while (std::getline(ss, layer, ',')) {
+                try {
+                    layerSizes.push_back(std::stoi(layer));
+                } catch (...) {
+                    // If we can't parse, just use a default
+                    layerSizes.push_back(10);
+                }
+            }
+            
+            // Add output layer (always 1 for regression)
+            layerSizes.push_back(1);
+            
+            plotNavigator->createPlot(
+                dataFrame, model,
+                "neural_network_architecture", 
+                "Neural Network Architecture"
+            );
+        }
+    }
+    else if (modelName == "Random Forest" || modelName == "Gradient Boosting" || modelName == "XGBoost") {
+        // For tree-based models, add a tree visualization (if available)
+        plotNavigator->createPlot(
+            dataFrame, model,
+            "tree_visualization", 
+            "Tree Visualization"
+        );
+    }
     
-    // Create feature importance plot
-    plotNavigator->createPlot(dataFrame, model, "importance", "Feature Importance");
+    // For all models except Linear Regression, add learning curves
+    if (modelName != "Linear Regression") {
+        plotNavigator->createPlot(
+            dataFrame, model,
+            "learning_curve", 
+            "Learning Curves"
+        );
+    }
 }
 
 void ResultsView::exportResults(const ExportDialog::ExportOptions& options) {

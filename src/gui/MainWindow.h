@@ -8,11 +8,13 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "data/DataFrame.h"
 #include "models/Model.h"
 #include "gui/FileSelector.h"
 #include "gui/ModelSelector.h"
+#include "gui/HyperparameterSelector.h"
 #include "gui/VariableSelector.h"
 #include "gui/ResultsView.h"
 
@@ -30,6 +32,7 @@ public:
     // Callback handlers
     void handleFileSelected(const std::string& filePath);
     void handleModelSelected(const std::string& modelType);
+    void handleHyperparametersSelected(const std::unordered_map<std::string, std::string>& hyperparams);
     void handleVariablesSelected(const std::vector<std::string>& inputVariables, 
                                const std::string& targetVariable);
     void handleModelFitted();
@@ -44,6 +47,7 @@ private:
     enum class State {
         FileSelection,
         ModelSelection,
+        HyperparameterSelection,
         VariableSelection,
         Results
     };
@@ -57,6 +61,7 @@ private:
     // Screens
     FileSelector* fileSelector;
     ModelSelector* modelSelector;
+    HyperparameterSelector* hyperparameterSelector;
     VariableSelector* variableSelector;
     ResultsView* resultsView;
     
@@ -68,6 +73,7 @@ private:
     State currentState;
     std::string currentFilePath;
     std::string currentModelType;
+    std::unordered_map<std::string, std::string> currentHyperparameters;
     std::vector<std::string> selectedInputVariables;
     std::string selectedTargetVariable;
     
