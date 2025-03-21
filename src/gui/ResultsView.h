@@ -243,6 +243,13 @@ private:
     std::string storedYLabel;
     std::string storedTitle;
 
+    // Resize handling
+    static void resizeTimeoutCallback(void* v);
+    static constexpr double RESIZE_DELAY = 0.2; // 200ms delay
+    bool resizeTimerActive;
+    int pendingWidth;
+    int pendingHeight;
+
     /**
      * @brief Regenerate the current plot with new dimensions
      */

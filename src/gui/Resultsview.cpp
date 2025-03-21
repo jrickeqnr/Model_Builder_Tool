@@ -123,7 +123,7 @@ void DataTable::draw_cell(TableContext context, int row, int col, int x, int y, 
 // PlotWidget implementation
 PlotWidget::PlotWidget(int x, int y, int w, int h)
     : Fl_Group(x, y, w, h), plotImageData(nullptr), plotImageWidth(0), plotImageHeight(0),
-      currentPlotType(PlotType::None)
+      currentPlotType(PlotType::None), resizeTimerActive(false), pendingWidth(0), pendingHeight(0)
 {
     box(FL_DOWN_BOX);
     color(FL_WHITE);
@@ -155,17 +155,40 @@ void PlotWidget::draw() {
     }
 }
 
-void PlotWidget::resize(int x, int y, int w, int h) {
-    // Call base class resize
-    Fl_Group::resize(x, y, w, h);
+void PlotWidget::resizeTimeoutCallback(void* v) {
+    PlotWidget* widget = static_cast<PlotWidget*>(v);
+    widget->resizeTimerActive = false;
+    
+    // Call base class resize first
+    widget->Fl_Group::resize(widget->x(), widget->y(), widget->pendingWidth, widget->pendingHeight);
     
     // Resize the plot box
-    plotBox->resize(x, y, w, h);
+    widget->plotBox->resize(widget->x(), widget->y(), widget->pendingWidth, widget->pendingHeight);
     
     // Regenerate the plot with new dimensions if we have data
-    if (currentPlotType != PlotType::None) {
-        regeneratePlot();
+    if (widget->currentPlotType != PlotType::None) {
+        widget->regeneratePlot();
     }
+}
+
+void PlotWidget::resize(int x, int y, int w, int h) {
+    // Store the pending dimensions
+    pendingWidth = w;
+    pendingHeight = h;
+    
+    // If a timer is already active, remove it
+    if (resizeTimerActive) {
+        Fl::remove_timeout(resizeTimeoutCallback, this);
+    }
+    
+    // Set a new timer
+    resizeTimerActive = true;
+    Fl::add_timeout(RESIZE_DELAY, resizeTimeoutCallback, this);
+    
+    // Immediately resize the widget without regenerating the plot
+    Fl_Group::resize(x, y, w, h);
+    plotBox->resize(x, y, w, h);
+    redraw();
 }
 
 void PlotWidget::regeneratePlot() {
