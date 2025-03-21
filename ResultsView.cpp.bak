@@ -1,6 +1,4 @@
-#include <iostream>
 #include "gui/ResultsView.h"
-#include "util/Logger.h"
 #include <FL/Fl.H>
 #include <FL/Fl_Group.H>
 #include <FL/Fl_Box.H>
@@ -18,11 +16,6 @@
 #include <chrono>
 #include <ctime>
 #include <filesystem>
-
-// Define the LOG_INFO macro if it's not available
-#ifndef LOG_INFO
-#define LOG_INFO(message, component) std::cout << "[INFO][" << component << "] " << message << std::endl
-#endif
 
 // Add logging function with file clearing on first use
 void log_debug(const std::string& message) {
@@ -917,7 +910,7 @@ void ResultsView::updateResults() {
     } else {
         // For now, all models use the same display until they are implemented
         // This will be updated as each model is implemented
-        // Replaced LOG_INFO with comment to fix build error
+        std::cout << "[INFO][ResultsView] Using generic display for " << modelType << " (not yet implemented)" << std::endl;
         updateLinearRegressionDisplay();
     }
     

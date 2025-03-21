@@ -4,8 +4,25 @@
 #include <FL/Fl_Menu_Bar.H>
 #include <FL/Fl_Box.H>
 #include <FL/fl_ask.H>
-#include "models/LinearRegression.h"
+#include <FL/Fl_File_Chooser.H>
+#include <iostream>
+#include <fstream>
+#include <memory>
+
+// Add includes for CSV handling and data
 #include "data/CSVReader.h"
+#include "data/DataFrame.h"
+
+// Include model headers - only include LinearRegression for now
+#include "models/LinearRegression.h"
+// The following models will be implemented later:
+// #include "models/ElasticNet.h"
+// #include "models/XGBoost.h"
+// #include "models/RandomForest.h"
+// #include "models/NeuralNetwork.h"
+// #include "models/GradientBoosting.h"
+
+// Include utilities
 #include "util/Logger.h"
 
 // Define the menu items
@@ -208,13 +225,17 @@ void MainWindow::handleVariablesSelected(const std::vector<std::string>& inputVa
     }
     statusBar->copy_label(statusMsg.c_str());
     
-    // Fit model
+    // Fit model and move to results view
+    fitModelAndShowResults();
+}
+
+void MainWindow::fitModelAndShowResults() {
     try {
         // Prepare data
-        Eigen::MatrixXd X = dataFrame->toMatrix(inputVariables);
+        Eigen::MatrixXd X = dataFrame->toMatrix(selectedInputVariables);
         Eigen::VectorXd y = Eigen::Map<Eigen::VectorXd>(
-            dataFrame->getColumn(targetVariable).data(),
-            dataFrame->getColumn(targetVariable).size()
+            dataFrame->getColumn(selectedTargetVariable).data(),
+            dataFrame->getColumn(selectedTargetVariable).size()
         );
         
         // Fit model
@@ -222,12 +243,11 @@ void MainWindow::handleVariablesSelected(const std::vector<std::string>& inputVa
         Fl::check();  // Update the UI to show the status message
         
         // Pass variable names to the model when fitting
-        bool success = model->fit(X, y, inputVariables, targetVariable);
+        bool success = model->fit(X, y, selectedInputVariables, selectedTargetVariable);
         
         if (success) {
-            // Update results view
-            resultsView->setModel(model);
-            resultsView->setData(dataFrame, inputVariables, targetVariable);
+            // Configure results view based on model type
+            configureResultsView();
             
             // Move to results step
             currentState = State::Results;
@@ -242,6 +262,20 @@ void MainWindow::handleVariablesSelected(const std::vector<std::string>& inputVa
     } catch (const std::exception& e) {
         fl_alert("Error fitting model: %s", e.what());
         statusBar->copy_label("Error fitting model");
+    }
+}
+
+void MainWindow::configureResultsView() {
+    // Update results view with model and data
+    resultsView->setModel(model);
+    resultsView->setData(dataFrame, selectedInputVariables, selectedTargetVariable);
+    
+    // Configure results view based on model type
+    resultsView->setModelType(currentModelType);
+    
+    // Pass hyperparameters to results view if needed
+    if (!currentHyperparameters.empty()) {
+        resultsView->setHyperparameters(currentHyperparameters);
     }
 }
 
@@ -366,54 +400,19 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
     std::shared_ptr<Model> result = nullptr;
     
     try {
-        if (modelType == "Linear Regression") {
-            result = std::make_shared<LinearRegression>();
-        }
-        else if (modelType == "ElasticNet") {
-            // In a real implementation, we would create an ElasticNet model class
-            // and pass the hyperparameters to the constructor
-            // For now, we'll return a LinearRegression as a placeholder
-            auto linearModel = std::make_shared<LinearRegression>();
-            // In a real implementation, we would set the hyperparameters here
-            result = linearModel;
-        }
-        else if (modelType == "XGBoost") {
-            // In a real implementation, we would create an XGBoost model class
-            // and pass the hyperparameters to the constructor
-            // For now, we'll return a LinearRegression as a placeholder
-            auto linearModel = std::make_shared<LinearRegression>();
-            // In a real implementation, we would set the hyperparameters here
-            result = linearModel;
-        }
-        else if (modelType == "Random Forest") {
-            // In a real implementation, we would create a RandomForest model class
-            // and pass the hyperparameters to the constructor
-            // For now, we'll return a LinearRegression as a placeholder
-            auto linearModel = std::make_shared<LinearRegression>();
-            // In a real implementation, we would set the hyperparameters here
-            result = linearModel;
-        }
-        else if (modelType == "Neural Network") {
-            // In a real implementation, we would create a NeuralNetwork model class
-            // and pass the hyperparameters to the constructor
-            // For now, we'll return a LinearRegression as a placeholder
-            auto linearModel = std::make_shared<LinearRegression>();
-            // In a real implementation, we would set the hyperparameters here
-            result = linearModel;
-        }
-        else if (modelType == "Gradient Boosting") {
-            // In a real implementation, we would create a GradientBoosting model class
-            // and pass the hyperparameters to the constructor
-            // For now, we'll return a LinearRegression as a placeholder
-            auto linearModel = std::make_shared<LinearRegression>();
-            // In a real implementation, we would set the hyperparameters here
-            result = linearModel;
+        // Currently all models use LinearRegression as a placeholder
+        LOG_INFO("Using LinearRegression for all model types temporarily", "MainWindow");
+        result = std::make_shared<LinearRegression>();
+        
+        if (modelType != "Linear Regression") {
+            LOG_INFO("Using LinearRegression as a placeholder for " + modelType, "MainWindow");
+            LOG_INFO("Hyperparameters for " + modelType + " will be applied when implemented", "MainWindow");
         }
         
         if (result) {
             LOG_INFO("Model created successfully", "MainWindow");
         } else {
-            LOG_ERROR("Unknown model type: " + modelType, "MainWindow");
+            LOG_ERROR("Failed to create model", "MainWindow");
         }
     } catch (const std::exception& e) {
         LOG_ERROR("Exception creating model: " + std::string(e.what()), "MainWindow");

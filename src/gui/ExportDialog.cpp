@@ -68,12 +68,20 @@ void ExportDialog::setModel(std::shared_ptr<Model> model) {
 
 ExportDialog::ExportOptions ExportDialog::getExportOptions() const {
     ExportOptions options;
+    // Set new fields for compatibility with updated ResultsView
+    options.exportSummary = modelSummaryCheck->value();
+    options.exportCSV = predictedValuesCheck->value();
+    options.exportPlots = scatterPlotCheck->value() || linePlotCheck->value() || importancePlotCheck->value();
+    options.outputDir = selectedPath;
+    
+    // Set legacy fields for backward compatibility
     options.scatterPlot = scatterPlotCheck->value();
     options.linePlot = linePlotCheck->value();
     options.importancePlot = importancePlotCheck->value();
     options.predictedValues = predictedValuesCheck->value();
     options.modelSummary = modelSummaryCheck->value();
     options.exportPath = selectedPath;
+    
     return options;
 }
 

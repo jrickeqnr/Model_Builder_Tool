@@ -91,6 +91,20 @@ private:
     std::shared_ptr<Model> createModel(const std::string& modelType);
     
     /**
+     * @brief Fit the model with selected variables and show results
+     * 
+     * This method prepares the data, fits the model, and updates the results view
+     */
+    void fitModelAndShowResults();
+    
+    /**
+     * @brief Configure the results view based on the selected model type
+     * 
+     * This method sets up the results view with model-specific configurations
+     */
+    void configureResultsView();
+    
+    /**
      * @brief Initialize the menu bar
      */
     void setupMenuBar();

@@ -64,6 +64,13 @@ public:
      * @return bool True if successful, false otherwise
      */
     bool savePlotToFile(size_t index, const std::string& filename);
+    
+    /**
+     * @brief Get the total number of plots
+     * 
+     * @return size_t Number of plots
+     */
+    size_t getPlotCount() const { return plots.size(); }
 
 private:
     std::vector<PlotWidget*> plots;
@@ -109,6 +116,20 @@ public:
                 const std::string& targetVariable);
 
     /**
+     * @brief Set the model type for specialized display
+     * 
+     * @param modelType The type of model being displayed
+     */
+    void setModelType(const std::string& modelType);
+    
+    /**
+     * @brief Set hyperparameters for specialized display
+     * 
+     * @param hyperparams Map of hyperparameter names to values
+     */
+    void setHyperparameters(const std::unordered_map<std::string, std::string>& hyperparams);
+
+    /**
      * @brief Update the results display
      */
     void updateResults();
@@ -139,12 +160,30 @@ private:
     void updateStatisticsDisplay();
     void createPlots();
     void exportResults(const ExportDialog::ExportOptions& options);
+    
+    // Model-specific display methods
+    void updateLinearRegressionDisplay();
+    void updateElasticNetDisplay();
+    void updateRandomForestDisplay();
+    void updateXGBoostDisplay();
+    void updateGradientBoostingDisplay();
+    void updateNeuralNetworkDisplay();
+    
+    // Export methods for different model types
+    void exportLinearRegressionResults(const ExportDialog::ExportOptions& options);
+    void exportElasticNetResults(const ExportDialog::ExportOptions& options);
+    void exportRandomForestResults(const ExportDialog::ExportOptions& options);
+    void exportXGBoostResults(const ExportDialog::ExportOptions& options);
+    void exportGradientBoostingResults(const ExportDialog::ExportOptions& options);
+    void exportNeuralNetworkResults(const ExportDialog::ExportOptions& options);
 
     // Data members
     std::shared_ptr<Model> model;
     std::shared_ptr<DataFrame> dataFrame;
     std::vector<std::string> inputVariables;
     std::string targetVariable;
+    std::string modelType;
+    std::unordered_map<std::string, std::string> hyperparameters;
     std::function<void()> backButtonCallback;
 
     // UI Elements
@@ -158,6 +197,7 @@ private:
     DataTable* parametersTable;
     DataTable* statisticsTable;
     std::unique_ptr<ExportDialog> exportDialog;
+    Fl_Box* equationBox;
 };
 
 /**

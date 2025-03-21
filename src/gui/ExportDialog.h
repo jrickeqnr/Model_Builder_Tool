@@ -16,12 +16,29 @@
 class ExportDialog : public Fl_Window {
 public:
     struct ExportOptions {
+        bool exportSummary = false;
+        bool exportCSV = false;
+        bool exportPlots = false;
+        std::string outputDir;
+        
+        // For backward compatibility
         bool scatterPlot = false;
         bool linePlot = false;
         bool importancePlot = false;
         bool predictedValues = false;
         bool modelSummary = false;
         std::string exportPath;
+        
+        // Helper method to get string representation
+        std::string toString() const {
+            std::string result = "ExportOptions{";
+            result += "exportSummary=" + std::string(exportSummary ? "true" : "false");
+            result += ", exportCSV=" + std::string(exportCSV ? "true" : "false");
+            result += ", exportPlots=" + std::string(exportPlots ? "true" : "false");
+            result += ", outputDir='" + outputDir + "'";
+            result += "}";
+            return result;
+        }
     };
 
     ExportDialog(int w, int h, const char* title);
