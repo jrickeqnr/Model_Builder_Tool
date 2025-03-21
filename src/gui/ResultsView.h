@@ -353,16 +353,6 @@ private:
     void regeneratePlot();
     bool createTempDataFile(const std::string& data, const std::string& filename);
 
-    Fl_Box* plotBox;
-    char* plotImageData;
-    int plotImageWidth;
-    int plotImageHeight;
-    bool resizeTimerActive;
-    int pendingWidth;
-    int pendingHeight;
-    static constexpr double RESIZE_DELAY = 0.2; // seconds
-
-    // Store plot data for regeneration on resize
     enum class PlotType {
         None,
         Scatter,
@@ -373,11 +363,40 @@ private:
         NeuralNetworkArchitecture,
         TreeVisualization
     };
-    PlotType currentPlotType;
+
+    // Storage for plot image
+    char* plotImageData = nullptr;
+    int plotImageWidth = 0;
+    int plotImageHeight = 0;
+    
+    // Box for displaying the plot
+    Fl_Box* plotBox = nullptr;
+    
+    // Resize handling
+    bool resizeTimerActive = false;
+    int pendingWidth = 0;
+    int pendingHeight = 0;
+    static constexpr double RESIZE_DELAY = 0.2; // seconds
+
+    // Current plot type
+    PlotType currentPlotType = PlotType::None;
+
+    // Stored data for regeneration
     std::vector<double> storedActualValues;
     std::vector<double> storedPredictedValues;
     std::string storedXLabel;
     std::string storedYLabel;
     std::string storedTitle;
     std::unordered_map<std::string, double> storedImportance;
+    
+    // For learning curves
+    std::vector<double> storedTrainingScores;
+    std::vector<double> storedValidationScores;
+    std::vector<int> storedTrainingSizes;
+    
+    // For neural network architecture
+    std::vector<int> storedLayerSizes;
+    
+    // For tree visualization
+    std::string storedTreeStructure;
 };

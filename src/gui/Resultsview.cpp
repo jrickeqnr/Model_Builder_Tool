@@ -126,7 +126,24 @@ void PlotWidget::regeneratePlot() {
                                 "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
             break;
         case PlotType::Importance:
-            createImportancePlot(storedImportance, storedTitle, "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
+            createImportancePlot(storedImportance, storedTitle, 
+                                "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
+            break;
+        case PlotType::Residual:
+            createResidualPlot(storedActualValues, storedPredictedValues, storedTitle,
+                              "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
+            break;
+        case PlotType::LearningCurve:
+            createLearningCurvePlot(storedTrainingScores, storedValidationScores, storedTrainingSizes, storedTitle,
+                                   "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
+            break;
+        case PlotType::NeuralNetworkArchitecture:
+            createNeuralNetworkArchitecturePlot(storedLayerSizes, storedTitle,
+                                              "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
+            break;
+        case PlotType::TreeVisualization:
+            createTreeVisualizationPlot(storedTreeStructure, storedTitle,
+                                       "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
             break;
         case PlotType::None:
             break;
@@ -421,7 +438,8 @@ void PlotWidget::createImportancePlot(const std::unordered_map<std::string, doub
                                     const std::string& title,
                                     const std::string& tempDataPath,
                                     const std::string& tempImagePath,
-                                    const std::string& tempScriptPath) {
+                                    const std::string& tempScriptPath)
+{
     // Store data for regeneration
     currentPlotType = PlotType::Importance;
     storedImportance = importance;
@@ -1443,4 +1461,448 @@ void ResultsView::handleExportButton() {
 
     exportDialog->setModel(model);
     exportDialog->show();
+}
+
+void PlotWidget::createResidualPlot(const std::vector<double>& actualValues,
+                                  const std::vector<double>& predictedValues,
+                                  const std::string& title,
+                                  const std::string& tempDataPath,
+                                  const std::string& tempImagePath,
+                                  const std::string& tempScriptPath)
+{
+    if (actualValues.size() != predictedValues.size() || actualValues.empty()) {
+        return;
+    }
+
+    // Store the data for regeneration on resize
+    storedActualValues = actualValues;
+    storedPredictedValues = predictedValues;
+    storedTitle = title;
+    currentPlotType = PlotType::Residual;
+
+    // Create a data file with actual and predicted values
+    std::stringstream dataContent;
+    dataContent << "actual,predicted,residual\n";
+    
+    for (size_t i = 0; i < actualValues.size(); ++i) {
+        double residual = actualValues[i] - predictedValues[i];
+        dataContent << actualValues[i] << "," << predictedValues[i] << "," << residual << "\n";
+    }
+    
+    if (!createTempDataFile(dataContent.str(), tempDataPath)) {
+        return;
+    }
+    
+    // Create Python script for plotting
+    std::stringstream scriptContent;
+    scriptContent << "import matplotlib\n"
+                 << "matplotlib.use('Agg')\n"
+                 << "import matplotlib.pyplot as plt\n"
+                 << "import pandas as pd\n"
+                 << "import numpy as np\n\n"
+                 << "# Set figure size based on widget dimensions\n"
+                 << "plt.figure(figsize=(" << plotBox->w() / 100.0 << ", " << plotBox->h() / 100.0 << "), dpi=100)\n\n"
+                 << "# Read data\n"
+                 << "data = pd.read_csv('" << tempDataPath << "')\n\n"
+                 << "# Create residual plot\n"
+                 << "plt.scatter(data['predicted'], data['residual'], alpha=0.6)\n"
+                 << "plt.axhline(y=0, color='r', linestyle='-')\n"
+                 << "plt.xlabel('Predicted Values')\n"
+                 << "plt.ylabel('Residuals')\n"
+                 << "plt.title('" << title << "')\n"
+                 << "plt.grid(True, linestyle='--', alpha=0.7)\n\n"
+                 << "# Save the plot\n"
+                 << "plt.tight_layout()\n"
+                 << "plt.savefig('" << tempImagePath << "', dpi=100)\n"
+                 << "plt.close()\n";
+                 
+    if (!createTempDataFile(scriptContent.str(), tempScriptPath)) {
+        return;
+    }
+    
+    // Run the Python script to generate the plot
+    std::string command = "python \"" + tempScriptPath + "\"";
+    int result = system(command.c_str());
+    
+    if (result != 0) {
+        return;
+    }
+    
+    // Load the generated image
+    Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
+    if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
+        // Store the image dimensions
+        plotImageWidth = pngImage->w();
+        plotImageHeight = pngImage->h();
+
+        // Create a new buffer for the image data
+        if (plotImageData) {
+            delete[] plotImageData;
+        }
+        plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
+
+        // Copy the image data
+        const char* imageData = (const char*)pngImage->data()[0];
+        int depth = pngImage->d();
+
+        for (int y = 0; y < plotImageHeight; y++) {
+            for (int x = 0; x < plotImageWidth; x++) {
+                int srcIdx = (y * plotImageWidth + x) * depth;
+                int dstIdx = (y * plotImageWidth + x) * 3;
+
+                if (depth >= 3) {
+                    // RGB data
+                    plotImageData[dstIdx] = imageData[srcIdx];     // R
+                    plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
+                    plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
+                } else if (depth == 1) {
+                    // Grayscale
+                    plotImageData[dstIdx] = 
+                    plotImageData[dstIdx+1] = 
+                    plotImageData[dstIdx+2] = imageData[srcIdx];
+                }
+            }
+        }
+        
+        delete pngImage;
+        redraw();
+    }
+}
+
+void PlotWidget::createLearningCurvePlot(const std::vector<double>& trainingScores,
+                                       const std::vector<double>& validationScores,
+                                       const std::vector<int>& trainingSizes,
+                                       const std::string& title,
+                                       const std::string& tempDataPath,
+                                       const std::string& tempImagePath,
+                                       const std::string& tempScriptPath)
+{
+    if (trainingScores.size() != validationScores.size() || 
+        trainingScores.size() != trainingSizes.size() || 
+        trainingScores.empty()) {
+        return;
+    }
+
+    // Store data for regeneration (store all data for learning curves)
+    storedTitle = title;
+    storedTrainingScores = trainingScores;
+    storedValidationScores = validationScores;
+    storedTrainingSizes = trainingSizes;
+    currentPlotType = PlotType::LearningCurve;
+
+    // Create a data file with training and validation scores
+    std::stringstream dataContent;
+    dataContent << "training_size,training_score,validation_score\n";
+    
+    for (size_t i = 0; i < trainingScores.size(); ++i) {
+        dataContent << trainingSizes[i] << "," << trainingScores[i] << "," << validationScores[i] << "\n";
+    }
+    
+    if (!createTempDataFile(dataContent.str(), tempDataPath)) {
+        return;
+    }
+    
+    // Create Python script for plotting
+    std::stringstream scriptContent;
+    scriptContent << "import matplotlib\n"
+                 << "matplotlib.use('Agg')\n"
+                 << "import matplotlib.pyplot as plt\n"
+                 << "import pandas as pd\n"
+                 << "import numpy as np\n\n"
+                 << "# Set figure size based on widget dimensions\n"
+                 << "plt.figure(figsize=(" << plotBox->w() / 100.0 << ", " << plotBox->h() / 100.0 << "), dpi=100)\n\n"
+                 << "# Read data\n"
+                 << "data = pd.read_csv('" << tempDataPath << "')\n\n"
+                 << "# Create learning curve plot\n"
+                 << "plt.plot(data['training_size'], data['training_score'], 'o-', label='Training score')\n"
+                 << "plt.plot(data['training_size'], data['validation_score'], 'o-', label='Validation score')\n"
+                 << "plt.xlabel('Training examples')\n"
+                 << "plt.ylabel('Score')\n"
+                 << "plt.title('" << title << "')\n"
+                 << "plt.legend(loc='best')\n"
+                 << "plt.grid(True, linestyle='--', alpha=0.7)\n\n"
+                 << "# Save the plot\n"
+                 << "plt.tight_layout()\n"
+                 << "plt.savefig('" << tempImagePath << "', dpi=100)\n"
+                 << "plt.close()\n";
+                 
+    if (!createTempDataFile(scriptContent.str(), tempScriptPath)) {
+        return;
+    }
+    
+    // Run the Python script to generate the plot
+    std::string command = "python \"" + tempScriptPath + "\"";
+    int result = system(command.c_str());
+    
+    if (result != 0) {
+        return;
+    }
+    
+    // Load the generated image
+    Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
+    if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
+        // Store the image dimensions
+        plotImageWidth = pngImage->w();
+        plotImageHeight = pngImage->h();
+
+        // Create a new buffer for the image data
+        if (plotImageData) {
+            delete[] plotImageData;
+        }
+        plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
+
+        // Copy the image data
+        const char* imageData = (const char*)pngImage->data()[0];
+        int depth = pngImage->d();
+
+        for (int y = 0; y < plotImageHeight; y++) {
+            for (int x = 0; x < plotImageWidth; x++) {
+                int srcIdx = (y * plotImageWidth + x) * depth;
+                int dstIdx = (y * plotImageWidth + x) * 3;
+
+                if (depth >= 3) {
+                    // RGB data
+                    plotImageData[dstIdx] = imageData[srcIdx];     // R
+                    plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
+                    plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
+                } else if (depth == 1) {
+                    // Grayscale
+                    plotImageData[dstIdx] = 
+                    plotImageData[dstIdx+1] = 
+                    plotImageData[dstIdx+2] = imageData[srcIdx];
+                }
+            }
+        }
+        
+        delete pngImage;
+        redraw();
+    }
+}
+
+void PlotWidget::createNeuralNetworkArchitecturePlot(const std::vector<int>& layerSizes,
+                                                   const std::string& title,
+                                                   const std::string& tempDataPath,
+                                                   const std::string& tempImagePath,
+                                                   const std::string& tempScriptPath)
+{
+    if (layerSizes.size() < 2) {
+        return;
+    }
+
+    // Store data for regeneration
+    storedTitle = title;
+    storedLayerSizes = layerSizes;
+    currentPlotType = PlotType::NeuralNetworkArchitecture;
+
+    // Create a data file with layer sizes
+    std::stringstream dataContent;
+    dataContent << "layer_index,layer_size\n";
+    
+    for (size_t i = 0; i < layerSizes.size(); ++i) {
+        dataContent << i << "," << layerSizes[i] << "\n";
+    }
+    
+    if (!createTempDataFile(dataContent.str(), tempDataPath)) {
+        return;
+    }
+    
+    // Create Python script for plotting
+    std::stringstream scriptContent;
+    scriptContent << "import matplotlib\n"
+                 << "matplotlib.use('Agg')\n"
+                 << "import matplotlib.pyplot as plt\n"
+                 << "import pandas as pd\n"
+                 << "import numpy as np\n\n"
+                 << "# Set figure size based on widget dimensions\n"
+                 << "plt.figure(figsize=(" << plotBox->w() / 100.0 << ", " << plotBox->h() / 100.0 << "), dpi=100)\n\n"
+                 << "# Read data\n"
+                 << "data = pd.read_csv('" << tempDataPath << "')\n\n"
+                 << "# Neural network visualization function\n"
+                 << "def draw_neural_net(ax, left, right, bottom, top, layer_sizes):\n"
+                 << "    n_layers = len(layer_sizes)\n"
+                 << "    v_spacing = (top - bottom)/float(max(layer_sizes))\n"
+                 << "    h_spacing = (right - left)/float(n_layers - 1)\n"
+                 << "    \n"
+                 << "    # Nodes\n"
+                 << "    for n, layer_size in enumerate(layer_sizes):\n"
+                 << "        layer_top = v_spacing*(layer_size - 1)/2. + (top + bottom)/2.\n"
+                 << "        for m in range(layer_size):\n"
+                 << "            circle = plt.Circle((n*h_spacing + left, layer_top - m*v_spacing), v_spacing/4.,\n"
+                 << "                              color='w', ec='k', zorder=4)\n"
+                 << "            ax.add_artist(circle)\n"
+                 << "            \n"
+                 << "    # Edges\n"
+                 << "    for n, (layer_size_a, layer_size_b) in enumerate(zip(layer_sizes[:-1], layer_sizes[1:])):\n"
+                 << "        layer_top_a = v_spacing*(layer_size_a - 1)/2. + (top + bottom)/2.\n"
+                 << "        layer_top_b = v_spacing*(layer_size_b - 1)/2. + (top + bottom)/2.\n"
+                 << "        for m in range(layer_size_a):\n"
+                 << "            for o in range(layer_size_b):\n"
+                 << "                line = plt.Line2D([n*h_spacing + left, (n + 1)*h_spacing + left],\n"
+                 << "                               [layer_top_a - m*v_spacing, layer_top_b - o*v_spacing], c='k')\n"
+                 << "                ax.add_artist(line)\n"
+                 << "\n"
+                 << "# Get layer sizes\n"
+                 << "layer_sizes = data['layer_size'].tolist()\n\n"
+                 << "# Create neural network architecture visualization\n"
+                 << "fig = plt.figure(figsize=(" << plotBox->w() / 100.0 << ", " << plotBox->h() / 100.0 << "))\n"
+                 << "ax = fig.gca()\n"
+                 << "ax.axis('off')\n"
+                 << "draw_neural_net(ax, .1, .9, .1, .9, layer_sizes)\n\n"
+                 << "# Add layer labels\n"
+                 << "layer_names = ['Input'] + ['Hidden ' + str(i+1) for i in range(len(layer_sizes)-2)] + ['Output']\n"
+                 << "for i, name in enumerate(layer_names):\n"
+                 << "    plt.text(i/float(len(layer_sizes)-1), 0.01, name, ha='center', va='center')\n\n"
+                 << "plt.title('" << title << "')\n\n"
+                 << "# Save the plot\n"
+                 << "plt.tight_layout()\n"
+                 << "plt.savefig('" << tempImagePath << "', dpi=100)\n"
+                 << "plt.close()\n";
+                 
+    if (!createTempDataFile(scriptContent.str(), tempScriptPath)) {
+        return;
+    }
+    
+    // Run the Python script to generate the plot
+    std::string command = "python \"" + tempScriptPath + "\"";
+    int result = system(command.c_str());
+    
+    if (result != 0) {
+        return;
+    }
+    
+    // Load the generated image
+    Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
+    if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
+        // Store the image dimensions
+        plotImageWidth = pngImage->w();
+        plotImageHeight = pngImage->h();
+
+        // Create a new buffer for the image data
+        if (plotImageData) {
+            delete[] plotImageData;
+        }
+        plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
+
+        // Copy the image data
+        const char* imageData = (const char*)pngImage->data()[0];
+        int depth = pngImage->d();
+
+        for (int y = 0; y < plotImageHeight; y++) {
+            for (int x = 0; x < plotImageWidth; x++) {
+                int srcIdx = (y * plotImageWidth + x) * depth;
+                int dstIdx = (y * plotImageWidth + x) * 3;
+
+                if (depth >= 3) {
+                    // RGB data
+                    plotImageData[dstIdx] = imageData[srcIdx];     // R
+                    plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
+                    plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
+                } else if (depth == 1) {
+                    // Grayscale
+                    plotImageData[dstIdx] = 
+                    plotImageData[dstIdx+1] = 
+                    plotImageData[dstIdx+2] = imageData[srcIdx];
+                }
+            }
+        }
+        
+        delete pngImage;
+        redraw();
+    }
+}
+
+void PlotWidget::createTreeVisualizationPlot(const std::string& treeStructure,
+                                           const std::string& title,
+                                           const std::string& tempDataPath,
+                                           const std::string& tempImagePath,
+                                           const std::string& tempScriptPath)
+{
+    if (treeStructure.empty()) {
+        return;
+    }
+
+    // Store data for regeneration
+    storedTitle = title;
+    storedTreeStructure = treeStructure;
+    currentPlotType = PlotType::TreeVisualization;
+
+    // Create a data file with tree structure
+    std::stringstream dataContent;
+    dataContent << treeStructure;
+    
+    if (!createTempDataFile(dataContent.str(), tempDataPath)) {
+        return;
+    }
+    
+    // Create Python script for plotting a simplified tree visualization
+    std::stringstream scriptContent;
+    scriptContent << "import matplotlib\n"
+                 << "matplotlib.use('Agg')\n"
+                 << "import matplotlib.pyplot as plt\n"
+                 << "import numpy as np\n\n"
+                 << "# Set figure size based on widget dimensions\n"
+                 << "plt.figure(figsize=(" << plotBox->w() / 100.0 << ", " << plotBox->h() / 100.0 << "), dpi=100)\n\n"
+                 << "# For a real implementation, we would use libraries like scikit-learn's tree.export_graphviz\n"
+                 << "# and graphviz to visualize the tree. For this simplified version, we'll create a placeholder.\n\n"
+                 << "# Create a placeholder tree visualization\n"
+                 << "plt.text(0.5, 0.5, 'Tree Visualization Placeholder\\n\\nIn a real implementation, this would show\\n"
+                 << "an actual decision tree diagram using libraries\\nlike graphviz.', ha='center', va='center', fontsize=12)\n"
+                 << "plt.title('" << title << "')\n"
+                 << "plt.axis('off')\n\n"
+                 << "# Save the plot\n"
+                 << "plt.tight_layout()\n"
+                 << "plt.savefig('" << tempImagePath << "', dpi=100)\n"
+                 << "plt.close()\n";
+                 
+    if (!createTempDataFile(scriptContent.str(), tempScriptPath)) {
+        return;
+    }
+    
+    // Run the Python script to generate the plot
+    std::string command = "python \"" + tempScriptPath + "\"";
+    int result = system(command.c_str());
+    
+    if (result != 0) {
+        return;
+    }
+    
+    // Load the generated image
+    Fl_PNG_Image* pngImage = new Fl_PNG_Image(tempImagePath.c_str());
+    if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
+        // Store the image dimensions
+        plotImageWidth = pngImage->w();
+        plotImageHeight = pngImage->h();
+
+        // Create a new buffer for the image data
+        if (plotImageData) {
+            delete[] plotImageData;
+        }
+        plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
+
+        // Copy the image data
+        const char* imageData = (const char*)pngImage->data()[0];
+        int depth = pngImage->d();
+
+        for (int y = 0; y < plotImageHeight; y++) {
+            for (int x = 0; x < plotImageWidth; x++) {
+                int srcIdx = (y * plotImageWidth + x) * depth;
+                int dstIdx = (y * plotImageWidth + x) * 3;
+
+                if (depth >= 3) {
+                    // RGB data
+                    plotImageData[dstIdx] = imageData[srcIdx];     // R
+                    plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
+                    plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
+                } else if (depth == 1) {
+                    // Grayscale
+                    plotImageData[dstIdx] = 
+                    plotImageData[dstIdx+1] = 
+                    plotImageData[dstIdx+2] = imageData[srcIdx];
+                }
+            }
+        }
+        
+        delete pngImage;
+        redraw();
+    }
 }
