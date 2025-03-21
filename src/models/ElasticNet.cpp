@@ -140,7 +140,8 @@ void ElasticNet::coordinateDescent(const Eigen::MatrixXd& X, const Eigen::Vector
     }
     
     // Calculate intercept
-    intercept = y.mean() - X.rowwise().mean() * coefficients;
+    Eigen::VectorXd X_mean = X.rowwise().mean();
+    intercept = y.mean() - X_mean.dot(coefficients);
 }
 
 Eigen::VectorXd ElasticNet::predict(const Eigen::MatrixXd& X) const {

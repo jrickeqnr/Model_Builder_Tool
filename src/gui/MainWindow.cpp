@@ -13,14 +13,13 @@
 #include "data/CSVReader.h"
 #include "data/DataFrame.h"
 
-// Include model headers - only include LinearRegression for now
+// Include model headers
 #include "models/LinearRegression.h"
-// The following models will be implemented later:
-// #include "models/ElasticNet.h"
-// #include "models/XGBoost.h"
-// #include "models/RandomForest.h"
-// #include "models/NeuralNetwork.h"
-// #include "models/GradientBoosting.h"
+#include "models/ElasticNet.h"
+#include "models/XGBoost.h"
+#include "models/RandomForest.h"
+#include "models/NeuralNetwork.h"
+#include "models/GradientBoosting.h"
 
 // Include utilities
 #include "util/Logger.h"
@@ -400,13 +399,119 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
     std::shared_ptr<Model> result = nullptr;
     
     try {
-        // Currently all models use LinearRegression as a placeholder
-        LOG_INFO("Using LinearRegression for all model types temporarily", "MainWindow");
-        result = std::make_shared<LinearRegression>();
-        
-        if (modelType != "Linear Regression") {
-            LOG_INFO("Using LinearRegression as a placeholder for " + modelType, "MainWindow");
-            LOG_INFO("Hyperparameters for " + modelType + " will be applied when implemented", "MainWindow");
+        if (modelType == "Linear Regression") {
+            result = std::make_shared<LinearRegression>();
+        }
+        else if (modelType == "ElasticNet") {
+            // TODO: Implement ElasticNet model
+            LOG_ERROR("ElasticNet model not yet implemented", "MainWindow");
+            fl_alert("ElasticNet model is not yet implemented. Please select a different model type.");
+            return nullptr;
+        }
+        else if (modelType == "XGBoost") {
+            // Create XGBoost with selected hyperparameters
+            double learning_rate = 0.1;
+            int max_depth = 6;
+            int n_estimators = 100;
+            double subsample = 1.0;
+            double colsample_bytree = 1.0;
+            int min_child_weight = 1;
+            double gamma = 0.0;
+
+            // Parse hyperparameters if they exist
+            if (!currentHyperparameters.empty()) {
+                try {
+                    learning_rate = std::stod(currentHyperparameters.at("learning_rate"));
+                    max_depth = std::stoi(currentHyperparameters.at("max_depth"));
+                    n_estimators = std::stoi(currentHyperparameters.at("n_estimators"));
+                    subsample = std::stod(currentHyperparameters.at("subsample"));
+                    colsample_bytree = std::stod(currentHyperparameters.at("colsample_bytree"));
+                    min_child_weight = std::stoi(currentHyperparameters.at("min_child_weight"));
+                    gamma = std::stod(currentHyperparameters.at("gamma"));
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Error parsing XGBoost hyperparameters: " + std::string(e.what()), "MainWindow");
+                }
+            }
+
+            result = std::make_shared<XGBoost>(learning_rate, max_depth, n_estimators,
+                                             subsample, colsample_bytree, min_child_weight, gamma);
+        }
+        else if (modelType == "Random Forest") {
+            // TODO: Implement Random Forest model
+            LOG_ERROR("Random Forest model not yet implemented", "MainWindow");
+            fl_alert("Random Forest model is not yet implemented. Please select a different model type.");
+            return nullptr;
+        }
+        else if (modelType == "Neural Network") {
+            // Create Neural Network with selected hyperparameters
+            std::vector<int> hidden_layer_sizes = {10};  // Default
+            std::string activation = "relu";
+            double learning_rate = 0.001;
+            int max_iter = 200;
+            int batch_size = 32;
+            std::string solver = "adam";
+            double alpha = 0.0001;
+
+            // Parse hyperparameters if they exist
+            if (!currentHyperparameters.empty()) {
+                try {
+                    // Parse hidden layer sizes from comma-separated string
+                    std::string hidden_layers = currentHyperparameters.at("hidden_layer_sizes");
+                    std::stringstream ss(hidden_layers);
+                    std::string layer;
+                    hidden_layer_sizes.clear();
+                    while (std::getline(ss, layer, ',')) {
+                        hidden_layer_sizes.push_back(std::stoi(layer));
+                    }
+
+                    activation = currentHyperparameters.at("activation");
+                    learning_rate = std::stod(currentHyperparameters.at("learning_rate"));
+                    max_iter = std::stoi(currentHyperparameters.at("max_iter"));
+                    batch_size = std::stoi(currentHyperparameters.at("batch_size"));
+                    solver = currentHyperparameters.at("solver");
+                    alpha = std::stod(currentHyperparameters.at("alpha"));
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Error parsing Neural Network hyperparameters: " + std::string(e.what()), "MainWindow");
+                }
+            }
+
+            result = std::make_shared<NeuralNetwork>(hidden_layer_sizes, activation,
+                                                   learning_rate, max_iter, batch_size,
+                                                   solver, alpha);
+        }
+        else if (modelType == "Gradient Boosting") {
+            // Create Gradient Boosting with selected hyperparameters
+            double learning_rate = 0.1;
+            int n_estimators = 100;
+            int max_depth = 3;
+            int min_samples_split = 2;
+            int min_samples_leaf = 1;
+            double subsample = 1.0;
+            std::string loss = "squared_error";
+
+            // Parse hyperparameters if they exist
+            if (!currentHyperparameters.empty()) {
+                try {
+                    learning_rate = std::stod(currentHyperparameters.at("learning_rate"));
+                    n_estimators = std::stoi(currentHyperparameters.at("n_estimators"));
+                    max_depth = std::stoi(currentHyperparameters.at("max_depth"));
+                    min_samples_split = std::stoi(currentHyperparameters.at("min_samples_split"));
+                    min_samples_leaf = std::stoi(currentHyperparameters.at("min_samples_leaf"));
+                    subsample = std::stod(currentHyperparameters.at("subsample"));
+                    loss = currentHyperparameters.at("loss");
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Error parsing Gradient Boosting hyperparameters: " + std::string(e.what()), "MainWindow");
+                }
+            }
+
+            result = std::make_shared<GradientBoosting>(learning_rate, n_estimators,
+                                                      max_depth, min_samples_split,
+                                                      min_samples_leaf, subsample, loss);
+        }
+        else {
+            LOG_ERROR("Unknown model type: " + modelType, "MainWindow");
+            fl_alert("Unknown model type selected. Please try again.");
+            return nullptr;
         }
         
         if (result) {

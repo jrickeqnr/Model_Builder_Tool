@@ -43,6 +43,11 @@ set(SOURCES
     src/gui/DataTable.cpp
     src/gui/HyperparameterSelector.cpp
     src/models/LinearRegression.cpp
+    src/models/ElasticNet.cpp
+    src/models/XGBoost.cpp
+    src/models/RandomForest.cpp
+    src/models/GradientBoosting.cpp
+    src/models/NeuralNetwork.cpp
     src/data/CSVReader.cpp
     src/data/DataFrame.cpp
     # The PlottingUtility.h is a header-only file, so it's not included here

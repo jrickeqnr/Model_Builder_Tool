@@ -2,141 +2,94 @@
 #include <cmath>
 #include <iostream>
 #include <algorithm>
-#include <random>
+#include <numeric>  // For std::iota and std::accumulate
 #include <sstream>
+#include <random>
+#include <iomanip>
 
-// Layer implementation
-NeuralNetwork::Layer::Layer(int inputSize, int outputSize, std::mt19937& rng) {
-    // Initialize weights with Xavier/Glorot initialization
-    double stddev = std::sqrt(2.0 / (inputSize + outputSize));
-    std::normal_distribution<double> dist(0.0, stddev);
-    
-    weights = Eigen::MatrixXd(outputSize, inputSize);
-    biases = Eigen::VectorXd::Zero(outputSize);
-    
-    // Randomly initialize weights
-    for (int i = 0; i < outputSize; ++i) {
-        for (int j = 0; j < inputSize; ++j) {
-            weights(i, j) = dist(rng);
-        }
-        biases(i) = dist(rng);
-    }
+NeuralNetwork::NeuralNetwork() 
+    : hiddenActivation(Activation::RELU), outputActivation(Activation::LINEAR),
+      learningRate(0.01), epochs(1000), batchSize(32), tol(0.0001),
+      rSquared(0.0), adjustedRSquared(0.0), rmse(0.0),
+      nSamples(0), nFeatures(0), isFitted(false) {
+    // Initialize with a simple architecture (one hidden layer with 10 neurons)
+    layerSizes = {10};
 }
 
-void NeuralNetwork::Layer::forwardPass(const Eigen::MatrixXd& input, const std::string& activationFunc) {
-    // Z = W * X + b
-    Eigen::MatrixXd z = (weights * input.transpose()).colwise() + biases;
-    
-    // A = activation(Z)
-    activations = applyActivation(z, activationFunc);
+NeuralNetwork::NeuralNetwork(const std::vector<int>& hiddenLayers,
+                         Activation activation,
+                         Activation outputActivation,
+                         double learningRate,
+                         int epochs,
+                         int batchSize,
+                         double tol)
+    : layerSizes(hiddenLayers), hiddenActivation(activation), outputActivation(outputActivation),
+      learningRate(learningRate), epochs(epochs), batchSize(batchSize), tol(tol),
+      rSquared(0.0), adjustedRSquared(0.0), rmse(0.0),
+      nSamples(0), nFeatures(0), isFitted(false) {
 }
 
-Eigen::MatrixXd NeuralNetwork::Layer::backwardPass(const Eigen::MatrixXd& nextLayerDeltas, 
-                                                 const Eigen::MatrixXd& nextLayerWeights,
-                                                 const std::string& activationFunc) {
-    // For hidden layers: delta = (W^(l+1)' * delta^(l+1)) .* activation'(z^(l))
-    deltas = (nextLayerWeights.transpose() * nextLayerDeltas).array() * 
-             applyActivationDerivative(activations, activationFunc).array();
+NeuralNetwork::NeuralNetwork(const std::vector<int>& hiddenLayers,
+                         const std::string& activation,
+                         double learningRate,
+                         int epochs,
+                         int batchSize,
+                         const std::string& solver,
+                         double alpha)
+    : layerSizes(hiddenLayers),
+      learningRate(learningRate), epochs(epochs), batchSize(batchSize), tol(0.0001),
+      rSquared(0.0), adjustedRSquared(0.0), rmse(0.0),
+      nSamples(0), nFeatures(0), isFitted(false) {
     
-    return deltas;
-}
-
-Eigen::MatrixXd NeuralNetwork::Layer::applyActivation(const Eigen::MatrixXd& input, 
-                                                    const std::string& activationFunc) const {
-    Eigen::MatrixXd result = input;
-    
-    if (activationFunc == "sigmoid") {
-        // sigmoid(x) = 1 / (1 + exp(-x))
-        result = 1.0 / (1.0 + (-input.array()).exp());
-    } else if (activationFunc == "tanh") {
-        // tanh(x) = (exp(x) - exp(-x)) / (exp(x) + exp(-x))
-        result = input.array().tanh();
-    } else if (activationFunc == "relu") {
-        // relu(x) = max(0, x)
-        result = input.array().max(0.0);
+    // Convert activation string to enum
+    if (activation == "relu") {
+        hiddenActivation = Activation::RELU;
+    } else if (activation == "sigmoid") {
+        hiddenActivation = Activation::SIGMOID;
+    } else if (activation == "tanh") {
+        hiddenActivation = Activation::TANH;
+    } else if (activation == "identity") {
+        hiddenActivation = Activation::LINEAR;
     } else {
-        // identity: do nothing
+        std::cerr << "Warning: Unknown activation function '" << activation 
+                 << "'. Using ReLU as default." << std::endl;
+        hiddenActivation = Activation::RELU;
     }
     
-    return result;
-}
-
-Eigen::MatrixXd NeuralNetwork::Layer::applyActivationDerivative(const Eigen::MatrixXd& output, 
-                                                              const std::string& activationFunc) const {
-    Eigen::MatrixXd result = Eigen::MatrixXd::Ones(output.rows(), output.cols());
+    // For now, always use LINEAR for output activation
+    outputActivation = Activation::LINEAR;
     
-    if (activationFunc == "sigmoid") {
-        // sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
-        result = output.array() * (1.0 - output.array());
-    } else if (activationFunc == "tanh") {
-        // tanh'(x) = 1 - tanh^2(x)
-        result = 1.0 - output.array().square();
-    } else if (activationFunc == "relu") {
-        // relu'(x) = 1 if x > 0, 0 otherwise
-        for (int i = 0; i < output.rows(); ++i) {
-            for (int j = 0; j < output.cols(); ++j) {
-                result(i, j) = output(i, j) > 0.0 ? 1.0 : 0.0;
-            }
-        }
-    } else {
-        // identity: derivative is 1
+    // Note: solver parameter currently not used in this implementation
+    // but could be extended to support different optimization algorithms
+    if (solver != "adam" && solver != "sgd" && solver != "lbfgs") {
+        std::cerr << "Warning: Solver '" << solver << "' not supported. Using default implementation." << std::endl;
     }
-    
-    return result;
-}
-
-// NeuralNetwork implementation
-NeuralNetwork::NeuralNetwork()
-    : hiddenLayerSizes({10, 10}), activation("relu"), solver("adam"),
-      learningRate(0.01), maxIter(1000), batchSize(32), alpha(0.0001),
-      isFitted(false), nSamples(0), nFeatures(0), rmse(0.0), 
-      finalLoss(0.0), nIterations(0), targetMean(0.0), targetStdDev(1.0) {
-    // Initialize random number generator with a random seed
-    std::random_device rd;
-    rng = std::mt19937(rd());
-}
-
-NeuralNetwork::NeuralNetwork(const std::vector<int>& hiddenLayerSizes, 
-                           const std::string& activation,
-                           double learningRate,
-                           int maxIter,
-                           int batchSize,
-                           const std::string& solver,
-                           double alpha)
-    : hiddenLayerSizes(hiddenLayerSizes), activation(activation), solver(solver),
-      learningRate(learningRate), maxIter(maxIter), batchSize(batchSize), alpha(alpha),
-      isFitted(false), nSamples(0), nFeatures(0), rmse(0.0), 
-      finalLoss(0.0), nIterations(0), targetMean(0.0), targetStdDev(1.0) {
-    // Initialize random number generator with a random seed
-    std::random_device rd;
-    rng = std::mt19937(rd());
 }
 
 bool NeuralNetwork::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y,
-                       const std::vector<std::string>& variableNames,
-                       const std::string& targetName) {
+                     const std::vector<std::string>& variableNames,
+                     const std::string& targetName) {
+    if (X.rows() != y.rows()) {
+        std::cerr << "Error: Number of samples in X (" << X.rows() 
+                 << ") does not match number of samples in y (" << y.rows() << ")." << std::endl;
+        return false;
+    }
+
     try {
-        // Check dimensions
-        if (X.rows() != y.rows()) {
-            std::cerr << "Error: Number of samples in X (" << X.rows() 
-                    << ") does not match number of samples in y (" << y.rows() << ")." << std::endl;
-            return false;
-        }
-        
         nSamples = X.rows();
         nFeatures = X.cols();
-        
+
         // Store variable names
         if (variableNames.size() == 0) {
-            // Generate default variable names
+            // If no variable names provided, generate default ones
             inputVariableNames.clear();
             for (int i = 0; i < nFeatures; ++i) {
                 inputVariableNames.push_back("Variable_" + std::to_string(i+1));
             }
         } else if (variableNames.size() != nFeatures) {
             std::cerr << "Warning: Number of variable names (" << variableNames.size()
-                    << ") does not match number of features (" << nFeatures 
-                    << "). Using default names." << std::endl;
+                     << ") does not match number of features (" << nFeatures 
+                     << "). Using default names." << std::endl;
             
             // Generate default names
             inputVariableNames.clear();
@@ -150,167 +103,114 @@ bool NeuralNetwork::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y,
         
         // Store target variable name
         targetVariableName = targetName.empty() ? "Target" : targetName;
+
+        // Calculate normalization parameters
+        calculateNormalizationParams(X, y);
+
+        // Initialize network architecture
+        // Input layer (nFeatures) -> Hidden layers -> Output layer (1)
+        std::vector<int> architecture;
+        architecture.push_back(nFeatures);
+        for (int hiddenSize : layerSizes) {
+            architecture.push_back(hiddenSize);
+        }
+        architecture.push_back(1);  // One output neuron for regression
+
+        // Initialize weights and biases
+        weights.clear();
+        biases.clear();
         
-        // Standardize features and target
-        featureMeans = X.colwise().mean();
-        featureStdDevs = ((X.rowwise() - featureMeans.transpose()).array().square().colwise().sum() / (nSamples - 1)).sqrt();
-        
-        // Check for constant features (zero standard deviation) and set to 1 to avoid division by zero
-        for (int i = 0; i < nFeatures; ++i) {
-            if (featureStdDevs(i) < 1e-10) {
-                featureStdDevs(i) = 1.0;
+        for (size_t i = 0; i < architecture.size() - 1; ++i) {
+            int inputSize = architecture[i];
+            int outputSize = architecture[i + 1];
+            
+            // Initialize weights with Xavier initialization
+            double weightScale = std::sqrt(2.0 / (inputSize + outputSize));
+            
+            // Create random weight matrix with values ~ N(0, weightScale)
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::normal_distribution<double> dist(0.0, weightScale);
+            
+            Eigen::MatrixXd W(outputSize, inputSize);
+            for (int r = 0; r < outputSize; ++r) {
+                for (int c = 0; c < inputSize; ++c) {
+                    W(r, c) = dist(gen);
+                }
             }
+            weights.push_back(W);
+            
+            // Initialize biases to zero
+            Eigen::VectorXd b = Eigen::VectorXd::Zero(outputSize);
+            biases.push_back(b);
         }
+
+        // Normalize features
+        Eigen::MatrixXd X_norm = normalizeFeatures(X);
         
-        Eigen::MatrixXd X_scaled = standardizeFeatures(X);
+        // Normalize target
+        Eigen::VectorXd y_norm = (y.array() - targetMean) / targetStdDev;
         
-        // Standardize the target
-        targetMean = y.mean();
-        targetStdDev = std::sqrt((y.array() - targetMean).square().sum() / (nSamples - 1));
-        Eigen::VectorXd y_scaled = (y.array() - targetMean) / targetStdDev;
-        
-        // Initialize layers
-        layers.clear();
-        
-        // Input to first hidden layer
-        layers.push_back(Layer(nFeatures, hiddenLayerSizes[0], rng));
-        
-        // Hidden layers
-        for (size_t i = 1; i < hiddenLayerSizes.size(); ++i) {
-            layers.push_back(Layer(hiddenLayerSizes[i-1], hiddenLayerSizes[i], rng));
-        }
-        
-        // Output layer (1 output for regression)
-        layers.push_back(Layer(hiddenLayerSizes.back(), 1, rng));
-        
-        // Training using stochastic gradient descent
-        double currentLearningRate = learningRate;
-        double previousLoss = std::numeric_limits<double>::max();
-        
-        // For early stopping
-        int patience = 10;
-        int noImprovement = 0;
-        
-        // For Adam optimizer
-        std::vector<Eigen::MatrixXd> m_weights(layers.size());
-        std::vector<Eigen::VectorXd> m_biases(layers.size());
-        std::vector<Eigen::MatrixXd> v_weights(layers.size());
-        std::vector<Eigen::VectorXd> v_biases(layers.size());
-        
-        for (size_t i = 0; i < layers.size(); ++i) {
-            m_weights[i] = Eigen::MatrixXd::Zero(layers[i].weights.rows(), layers[i].weights.cols());
-            m_biases[i] = Eigen::VectorXd::Zero(layers[i].biases.size());
-            v_weights[i] = Eigen::MatrixXd::Zero(layers[i].weights.rows(), layers[i].weights.cols());
-            v_biases[i] = Eigen::VectorXd::Zero(layers[i].biases.size());
-        }
-        
-        // Adam parameters
-        double beta1 = 0.9;
-        double beta2 = 0.999;
-        double epsilon = 1e-8;
+        // Initialize variables for training
+        double prevLoss = std::numeric_limits<double>::max();
         
         // Training loop
-        for (int iter = 0; iter < maxIter; ++iter) {
-            // Shuffle data for stochastic updates
+        for (int epoch = 0; epoch < epochs; ++epoch) {
+            // Shuffle indices for stochastic gradient descent
             std::vector<int> indices(nSamples);
             std::iota(indices.begin(), indices.end(), 0);
-            std::shuffle(indices.begin(), indices.end(), rng);
+            std::random_device rd;
+            std::mt19937 g(rd());
+            std::shuffle(indices.begin(), indices.end(), g);
             
-            // Minibatch training
-            for (int batch_start = 0; batch_start < nSamples; batch_start += batchSize) {
-                int batchSize = std::min(this->batchSize, nSamples - batch_start);
+            double epochLoss = 0.0;
+            
+            // Mini-batch gradient descent
+            for (int i = 0; i < nSamples; i += batchSize) {
+                int actualBatchSize = std::min(batchSize, nSamples - i);
                 
-                Eigen::MatrixXd X_batch(batchSize, nFeatures);
-                Eigen::VectorXd y_batch(batchSize);
+                // Create batch
+                Eigen::MatrixXd X_batch(actualBatchSize, nFeatures);
+                Eigen::VectorXd y_batch(actualBatchSize);
                 
-                for (int i = 0; i < batchSize; ++i) {
-                    int idx = indices[batch_start + i];
-                    X_batch.row(i) = X_scaled.row(idx);
-                    y_batch(i) = y_scaled(idx);
+                for (int j = 0; j < actualBatchSize; ++j) {
+                    X_batch.row(j) = X_norm.row(indices[i + j]);
+                    y_batch(j) = y_norm(indices[i + j]);
                 }
                 
-                // Forward pass
-                forwardPass(X_batch);
+                // Forward propagation
+                std::vector<Eigen::MatrixXd> activations = forwardPropagate(X_batch);
                 
-                // Backward pass
-                backwardPass(X_batch, y_batch);
+                // Backward propagation
+                auto [weightGrads, biasGrads] = backwardPropagate(X_batch, y_batch, activations);
                 
                 // Update parameters
-                if (solver == "adam") {
-                    // Adam update
-                    for (size_t i = 0; i < layers.size(); ++i) {
-                        // Update biases
-                        m_biases[i] = beta1 * m_biases[i] + (1 - beta1) * layers[i].deltas.rowwise().sum();
-                        v_biases[i] = beta2 * v_biases[i] + (1 - beta2) * (layers[i].deltas.rowwise().sum().array().square().matrix());
-                        
-                        Eigen::VectorXd m_bias_corrected = m_biases[i] / (1 - std::pow(beta1, iter + 1));
-                        Eigen::VectorXd v_bias_corrected = v_biases[i] / (1 - std::pow(beta2, iter + 1));
-                        
-                        layers[i].biases -= currentLearningRate * m_bias_corrected.array() / 
-                                          (v_bias_corrected.array().sqrt() + epsilon);
-                        
-                        // Update weights
-                        Eigen::MatrixXd prev_activations = (i == 0) ? X_batch : layers[i-1].activations;
-                        Eigen::MatrixXd weight_gradient = layers[i].deltas * prev_activations;
-                        
-                        m_weights[i] = beta1 * m_weights[i] + (1 - beta1) * weight_gradient;
-                        v_weights[i] = beta2 * v_weights[i] + (1 - beta2) * (weight_gradient.array().square().matrix());
-                        
-                        Eigen::MatrixXd m_weight_corrected = m_weights[i] / (1 - std::pow(beta1, iter + 1));
-                        Eigen::MatrixXd v_weight_corrected = v_weights[i] / (1 - std::pow(beta2, iter + 1));
-                        
-                        layers[i].weights -= currentLearningRate * m_weight_corrected.array() / 
-                                           (v_weight_corrected.array().sqrt() + epsilon).matrix();
-                        
-                        // Add L2 regularization
-                        if (alpha > 0) {
-                            layers[i].weights -= currentLearningRate * alpha * layers[i].weights;
-                        }
-                    }
-                } else {
-                    // Standard SGD update
-                    updateParameters(currentLearningRate);
-                }
+                updateParameters(weightGrads, biasGrads);
+                
+                // Calculate batch loss (MSE)
+                Eigen::VectorXd predictions = activations.back();
+                double batchLoss = (predictions - y_batch).array().square().mean();
+                epochLoss += batchLoss * actualBatchSize;
             }
             
-            // Calculate loss and check for convergence
-            Eigen::VectorXd predictions = predict(X);
-            double current_loss = calculateLoss(predictions, y);
+            // Average loss for the epoch
+            epochLoss /= nSamples;
             
-            // Learning rate decay
-            if (solver == "sgd" && iter > 0 && iter % 20 == 0) {
-                currentLearningRate *= 0.9;
-            }
+            // Check for convergence
+            double improvement = std::abs(prevLoss - epochLoss);
+            prevLoss = epochLoss;
             
-            // Early stopping check
-            if (current_loss < previousLoss - 1e-4) {
-                noImprovement = 0;
-            } else {
-                noImprovement++;
-                if (noImprovement >= patience) {
-                    std::cout << "Early stopping at iteration " << iter << std::endl;
-                    break;
-                }
-            }
-            
-            previousLoss = current_loss;
-            finalLoss = current_loss;
-            nIterations = iter + 1;
-            
-            // Print progress
-            if (iter % 100 == 0) {
-                std::cout << "Iteration " << iter << ", Loss: " << current_loss << std::endl;
+            if (improvement < tol) {
+                break;
             }
         }
-        
-        // Calculate RMSE
-        Eigen::VectorXd predictions = predict(X);
-        rmse = std::sqrt((predictions - y).array().square().mean());
-        
-        // Calculate feature importance
-        calculateFeatureImportance(X, y);
-        
+
+        // Set isFitted to true
         isFitted = true;
+        
+        // Calculate statistics
+        calculateStatistics(X, y);
+
         return true;
     } catch (const std::exception& e) {
         std::cerr << "Error fitting Neural Network model: " << e.what() << std::endl;
@@ -318,138 +218,237 @@ bool NeuralNetwork::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y,
     }
 }
 
-void NeuralNetwork::forwardPass(const Eigen::MatrixXd& X) {
-    // For the first layer, input is X
-    layers[0].forwardPass(X, activation);
+void NeuralNetwork::calculateNormalizationParams(const Eigen::MatrixXd& X, const Eigen::VectorXd& y) {
+    // Calculate feature means
+    featureMeans = X.colwise().mean();
     
-    // For hidden layers
-    for (size_t i = 1; i < layers.size() - 1; ++i) {
-        layers[i].forwardPass(layers[i-1].activations, activation);
-    }
-    
-    // Output layer uses identity activation for regression
-    layers.back().forwardPass(layers[layers.size()-2].activations, "identity");
-}
-
-void NeuralNetwork::backwardPass(const Eigen::MatrixXd& X, const Eigen::VectorXd& y) {
-    int outputLayerIdx = layers.size() - 1;
-    
-    // Calculate error at output layer (MSE derivative = prediction - target)
-    Eigen::MatrixXd outputError = layers[outputLayerIdx].activations - y;
-    layers[outputLayerIdx].deltas = outputError;
-    
-    // Backpropagate error to hidden layers
-    for (int i = outputLayerIdx - 1; i >= 0; --i) {
-        layers[i].backwardPass(layers[i+1].deltas, layers[i+1].weights, activation);
-    }
-}
-
-void NeuralNetwork::updateParameters(double learningRate) {
-    for (size_t i = 0; i < layers.size(); ++i) {
-        // Get input to this layer
-        Eigen::MatrixXd prev_activations;
-        if (i == 0) {
-            // For first hidden layer, input is X
-            prev_activations = X;
-        } else {
-            prev_activations = layers[i-1].activations;
+    // Calculate feature standard deviations
+    featureStdDevs = Eigen::VectorXd(X.cols());
+    for (int i = 0; i < X.cols(); ++i) {
+        Eigen::VectorXd col = X.col(i);
+        featureStdDevs(i) = std::sqrt((col.array() - featureMeans(i)).square().sum() / (col.size() - 1));
+        
+        // Handle constant features (std dev = 0)
+        if (featureStdDevs(i) < 1e-10) {
+            featureStdDevs(i) = 1.0;
         }
+    }
+    
+    // Calculate target mean and standard deviation
+    targetMean = y.mean();
+    targetStdDev = std::sqrt((y.array() - targetMean).square().sum() / (y.size() - 1));
+    
+    // Handle constant target (std dev = 0)
+    if (targetStdDev < 1e-10) {
+        targetStdDev = 1.0;
+    }
+}
+
+Eigen::MatrixXd NeuralNetwork::normalizeFeatures(const Eigen::MatrixXd& X) const {
+    Eigen::MatrixXd X_norm = X;
+    
+    for (int i = 0; i < X.cols(); ++i) {
+        X_norm.col(i) = (X.col(i).array() - featureMeans(i)) / featureStdDevs(i);
+    }
+    
+    return X_norm;
+}
+
+std::vector<Eigen::MatrixXd> NeuralNetwork::forwardPropagate(const Eigen::MatrixXd& X) const {
+    std::vector<Eigen::MatrixXd> activations;
+    
+    // Input layer activation is just the input
+    activations.push_back(X);
+    
+    // Forward pass through hidden layers
+    Eigen::MatrixXd current = X;
+    
+    for (size_t i = 0; i < weights.size() - 1; ++i) {
+        // Linear transformation: Z = XW^T + b
+        Eigen::MatrixXd Z = current * weights[i].transpose();
+        Z.rowwise() += biases[i].transpose();
+        
+        // Apply activation function
+        current = applyActivation(Z, hiddenActivation);
+        
+        // Store activation
+        activations.push_back(current);
+    }
+    
+    // Output layer
+    size_t lastLayerIdx = weights.size() - 1;
+    Eigen::MatrixXd Z = current * weights[lastLayerIdx].transpose();
+    Z.rowwise() += biases[lastLayerIdx].transpose();
+    
+    // Apply output activation function
+    current = applyActivation(Z, outputActivation);
+    
+    // Store output activation
+    activations.push_back(current);
+    
+    return activations;
+}
+
+std::pair<std::vector<Eigen::MatrixXd>, std::vector<Eigen::VectorXd>> 
+NeuralNetwork::backwardPropagate(const Eigen::MatrixXd& X, const Eigen::VectorXd& y, 
+                               const std::vector<Eigen::MatrixXd>& activations) {
+    int numLayers = weights.size();
+    
+    // Initialize gradient containers
+    std::vector<Eigen::MatrixXd> weightGrads(numLayers);
+    std::vector<Eigen::VectorXd> biasGrads(numLayers);
+    
+    // Calculate error at output layer
+    Eigen::MatrixXd outputError(y.size(), 1);
+    outputError.col(0) = activations.back().col(0) - y;
+    
+    // Backward pass (output to input)
+    Eigen::MatrixXd delta = outputError;
+    
+    if (outputActivation != Activation::LINEAR) {
+        // If non-linear output, apply activation derivative
+        Eigen::MatrixXd derivOutput = applyActivationDerivative(activations.back(), outputActivation);
+        delta = delta.array() * derivOutput.array();
+    }
+    
+    // Output layer gradients
+    weightGrads[numLayers - 1] = delta.transpose() * activations[numLayers - 1] / X.rows();
+    biasGrads[numLayers - 1] = delta.colwise().sum() / X.rows();
+    
+    // Hidden layers (backwards)
+    for (int l = numLayers - 2; l >= 0; --l) {
+        // Propagate error backward
+        delta = delta * weights[l + 1];
+        
+        // Apply activation derivative
+        Eigen::MatrixXd derivActivation = applyActivationDerivative(activations[l + 1], hiddenActivation);
+        delta = delta.array() * derivActivation.array();
         
         // Calculate gradients
-        Eigen::MatrixXd weight_gradient = layers[i].deltas * prev_activations;
-        Eigen::VectorXd bias_gradient = layers[i].deltas.rowwise().sum();
-        
-        // Update weights and biases
-        layers[i].weights -= learningRate * weight_gradient;
-        layers[i].biases -= learningRate * bias_gradient;
-        
-        // Add L2 regularization
-        if (alpha > 0) {
-            layers[i].weights -= learningRate * alpha * layers[i].weights;
-        }
+        weightGrads[l] = delta.transpose() * activations[l] / X.rows();
+        biasGrads[l] = delta.colwise().sum() / X.rows();
+    }
+    
+    return {weightGrads, biasGrads};
+}
+
+void NeuralNetwork::updateParameters(const std::vector<Eigen::MatrixXd>& weightGrads,
+                                  const std::vector<Eigen::VectorXd>& biasGrads) {
+    for (size_t i = 0; i < weights.size(); ++i) {
+        weights[i] -= learningRate * weightGrads[i];
+        biases[i] -= learningRate * biasGrads[i];
     }
 }
 
-double NeuralNetwork::calculateLoss(const Eigen::VectorXd& predictions, const Eigen::VectorXd& targets) const {
-    // Mean Squared Error
-    double mse = (predictions - targets).array().square().mean();
+Eigen::MatrixXd NeuralNetwork::applyActivation(const Eigen::MatrixXd& X, Activation activation) const {
+    Eigen::MatrixXd result = X;
     
-    // Add L2 regularization term
-    double l2_term = 0.0;
-    if (alpha > 0) {
-        for (const auto& layer : layers) {
-            l2_term += (layer.weights.array().square()).sum();
-        }
-        l2_term *= 0.5 * alpha / nSamples;
+    switch (activation) {
+        case Activation::RELU:
+            result = result.array().max(0.0);
+            break;
+        case Activation::SIGMOID:
+            result = 1.0 / (1.0 + (-result.array()).exp());
+            break;
+        case Activation::TANH:
+            result = result.array().tanh();
+            break;
+        case Activation::LINEAR:
+            // No transformation for linear activation
+            break;
     }
     
-    return mse + l2_term;
+    return result;
 }
 
-Eigen::MatrixXd NeuralNetwork::standardizeFeatures(const Eigen::MatrixXd& X) const {
-    return (X.rowwise() - featureMeans.transpose()).array().rowwise() / featureStdDevs.transpose().array();
+Eigen::MatrixXd NeuralNetwork::applyActivationDerivative(const Eigen::MatrixXd& X, Activation activation) const {
+    Eigen::MatrixXd result(X.rows(), X.cols());
+    
+    switch (activation) {
+        case Activation::RELU:
+            result = (X.array() > 0.0).cast<double>();
+            break;
+        case Activation::SIGMOID:
+            // sigmoid derivative: f(x) * (1 - f(x))
+            result = X.array() * (1.0 - X.array());
+            break;
+        case Activation::TANH:
+            // tanh derivative: 1 - f(x)^2
+            result = 1.0 - X.array().square();
+            break;
+        case Activation::LINEAR:
+            // Derivative of linear is 1
+            result.setOnes();
+            break;
+    }
+    
+    return result;
 }
 
 Eigen::VectorXd NeuralNetwork::predict(const Eigen::MatrixXd& X) const {
     if (!isFitted) {
         throw std::runtime_error("Model has not been fitted yet");
     }
-    
+
     if (X.cols() != nFeatures) {
         throw std::invalid_argument("Number of features in X (" + std::to_string(X.cols()) + 
-                                  ") does not match the number of features the model was trained on (" + 
-                                  std::to_string(nFeatures) + ")");
+                                   ") does not match the number of features the model was trained on (" + 
+                                   std::to_string(nFeatures) + ")");
     }
+
+    // Normalize input
+    Eigen::MatrixXd X_norm = normalizeFeatures(X);
     
-    // Standardize features
-    Eigen::MatrixXd X_scaled = standardizeFeatures(X);
+    // Forward pass
+    std::vector<Eigen::MatrixXd> activations = forwardPropagate(X_norm);
     
-    // Forward pass through the network
-    Eigen::MatrixXd current_input = X_scaled;
+    // Get output (last activation)
+    Eigen::VectorXd y_norm = activations.back().col(0);
     
-    for (size_t i = 0; i < layers.size() - 1; ++i) {
-        Eigen::MatrixXd z = (layers[i].weights * current_input.transpose()).colwise() + layers[i].biases;
-        current_input = layers[i].applyActivation(z, activation).transpose();
-    }
-    
-    // Output layer (identity activation)
-    Eigen::MatrixXd z_output = (layers.back().weights * current_input.transpose()).colwise() + layers.back().biases;
-    Eigen::VectorXd output = z_output.transpose();
-    
-    // Unstandardize predictions
-    return output.array() * targetStdDev + targetMean;
+    // Denormalize output
+    return y_norm.array() * targetStdDev + targetMean;
 }
 
 std::string NeuralNetwork::getName() const {
-    return "Neural Network";
+    return "NeuralNetwork";
 }
 
 std::unordered_map<std::string, double> NeuralNetwork::getParameters() const {
     std::unordered_map<std::string, double> params;
     
-    // Network architecture
-    std::stringstream ss;
-    for (size_t i = 0; i < hiddenLayerSizes.size(); ++i) {
-        ss << hiddenLayerSizes[i];
-        if (i < hiddenLayerSizes.size() - 1) {
-            ss << ",";
-        }
-    }
-    
-    params["hidden_layer_sizes"] = 0;  // Cannot directly return a string, client should use description
+    // Add hyperparameters
     params["learning_rate"] = learningRate;
-    params["max_iter"] = static_cast<double>(maxIter);
+    params["epochs"] = static_cast<double>(epochs);
     params["batch_size"] = static_cast<double>(batchSize);
-    params["alpha"] = alpha;
+    params["tolerance"] = tol;
+    
+    // Add layer sizes
+    params["input_layer_size"] = static_cast<double>(nFeatures);
+    for (size_t i = 0; i < layerSizes.size(); ++i) {
+        params["hidden_layer_" + std::to_string(i+1) + "_size"] = static_cast<double>(layerSizes[i]);
+    }
+    params["output_layer_size"] = 1.0;
+    
+    // Add activation functions (as numeric codes)
+    params["hidden_activation"] = static_cast<double>(hiddenActivation);
+    params["output_activation"] = static_cast<double>(outputActivation);
+    
+    // Add total number of parameters (weights and biases)
+    int totalParams = 0;
+    for (size_t i = 0; i < weights.size(); ++i) {
+        totalParams += weights[i].size() + biases[i].size();
+    }
+    params["total_parameters"] = static_cast<double>(totalParams);
     
     return params;
 }
 
 std::unordered_map<std::string, double> NeuralNetwork::getStatistics() const {
     std::unordered_map<std::string, double> stats;
+    
+    stats["r_squared"] = rSquared;
+    stats["adjusted_r_squared"] = adjustedRSquared;
     stats["rmse"] = rmse;
-    stats["final_loss"] = finalLoss;
-    stats["n_iterations"] = static_cast<double>(nIterations);
     stats["n_samples"] = static_cast<double>(nSamples);
     stats["n_features"] = static_cast<double>(nFeatures);
     
@@ -458,16 +457,36 @@ std::unordered_map<std::string, double> NeuralNetwork::getStatistics() const {
 
 std::string NeuralNetwork::getDescription() const {
     std::stringstream ss;
-    ss << "Neural Network (MLP) with architecture: ";
+    ss << "Neural Network with ";
     
-    ss << nFeatures << " -> ";
-    for (size_t i = 0; i < hiddenLayerSizes.size(); ++i) {
-        ss << hiddenLayerSizes[i];
-        if (i < hiddenLayerSizes.size() - 1) {
-            ss << " -> ";
+    // Format layer structure
+    ss << nFeatures << " input features, ";
+    for (size_t i = 0; i < layerSizes.size(); ++i) {
+        ss << layerSizes[i] << " neurons in hidden layer " << (i+1);
+        if (i < layerSizes.size() - 1) {
+            ss << ", ";
         }
     }
-    ss << " -> 1, activation=" << activation << ", solver=" << solver;
+    ss << " and 1 output neuron";
+    
+    // Add activation function info
+    std::string hiddenActStr;
+    switch (hiddenActivation) {
+        case Activation::RELU: hiddenActStr = "ReLU"; break;
+        case Activation::SIGMOID: hiddenActStr = "Sigmoid"; break;
+        case Activation::TANH: hiddenActStr = "Tanh"; break;
+        case Activation::LINEAR: hiddenActStr = "Linear"; break;
+    }
+    
+    std::string outputActStr;
+    switch (outputActivation) {
+        case Activation::RELU: outputActStr = "ReLU"; break;
+        case Activation::SIGMOID: outputActStr = "Sigmoid"; break;
+        case Activation::TANH: outputActStr = "Tanh"; break;
+        case Activation::LINEAR: outputActStr = "Linear"; break;
+    }
+    
+    ss << " (hidden: " << hiddenActStr << ", output: " << outputActStr << ")";
     
     return ss.str();
 }
@@ -480,65 +499,28 @@ std::string NeuralNetwork::getTargetName() const {
     return targetVariableName;
 }
 
-void NeuralNetwork::calculateFeatureImportance(const Eigen::MatrixXd& X, const Eigen::VectorXd& y) {
-    // Initialize importance scores
-    featureImportanceScores.clear();
-    for (const auto& name : inputVariableNames) {
-        featureImportanceScores[name] = 0.0;
-    }
+void NeuralNetwork::calculateStatistics(const Eigen::MatrixXd& X, const Eigen::VectorXd& y) {
+    // Get predictions
+    Eigen::VectorXd y_pred = predict(X);
     
-    // Get baseline score
-    Eigen::VectorXd baseline_pred = predict(X);
-    double baseline_mse = (baseline_pred - y).array().square().mean();
+    // Calculate SST (total sum of squares)
+    double y_mean = y.mean();
+    double sst = (y.array() - y_mean).square().sum();
     
-    // For each feature, calculate permutation importance
-    for (int i = 0; i < nFeatures; ++i) {
-        // Create a copy of the dataset with the current feature permuted
-        Eigen::MatrixXd X_permuted = X;
-        
-        // Extract the column to permute
-        Eigen::VectorXd col = X.col(i);
-        
-        // Create a permutation of indices
-        std::vector<int> indices(nSamples);
-        std::iota(indices.begin(), indices.end(), 0);
-        std::shuffle(indices.begin(), indices.end(), rng);
-        
-        // Apply permutation
-        for (int j = 0; j < nSamples; ++j) {
-            X_permuted(j, i) = X(indices[j], i);
-        }
-        
-        // Get predictions on permuted data
-        Eigen::VectorXd permuted_pred = predict(X_permuted);
-        double permuted_mse = (permuted_pred - y).array().square().mean();
-        
-        // Importance is the increase in error when the feature is permuted
-        double importance = permuted_mse - baseline_mse;
-        
-        // Store importance (if negative, set to 0)
-        if (i < inputVariableNames.size()) {
-            featureImportanceScores[inputVariableNames[i]] = std::max(0.0, importance);
-        }
-    }
+    // Calculate SSR (regression sum of squares)
+    double ssr = (y_pred.array() - y_mean).square().sum();
     
-    // Normalize importance scores to sum to 1
-    double sum_importance = 0.0;
-    for (const auto& pair : featureImportanceScores) {
-        sum_importance += pair.second;
-    }
+    // Calculate SSE (error sum of squares)
+    double sse = (y.array() - y_pred.array()).square().sum();
     
-    if (sum_importance > 0.0) {
-        for (auto& pair : featureImportanceScores) {
-            pair.second /= sum_importance;
-        }
-    } else {
-        // If all importance scores are 0, assign equal importance
-        double equal_importance = 1.0 / nFeatures;
-        for (auto& pair : featureImportanceScores) {
-            pair.second = equal_importance;
-        }
-    }
+    // Calculate R²
+    rSquared = ssr / sst;
+    
+    // Calculate adjusted R²
+    adjustedRSquared = 1.0 - (1.0 - rSquared) * (nSamples - 1) / (nSamples - nFeatures - 1);
+    
+    // Calculate RMSE
+    rmse = std::sqrt(sse / nSamples);
 }
 
 std::unordered_map<std::string, double> NeuralNetwork::getFeatureImportance() const {
@@ -546,5 +528,66 @@ std::unordered_map<std::string, double> NeuralNetwork::getFeatureImportance() co
         throw std::runtime_error("Model has not been fitted yet");
     }
     
-    return featureImportanceScores;
+    std::unordered_map<std::string, double> importance;
+    
+    // Create a random number generator for permutation
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    
+    // Create a test matrix with random values in the same range as the normalized data
+    int testSamples = 1000;
+    Eigen::MatrixXd X_test = Eigen::MatrixXd::Random(testSamples, nFeatures);
+    
+    // Normalize by standard deviation range (Random produces values in [-1,1])
+    for (int i = 0; i < nFeatures; ++i) {
+        X_test.col(i) = X_test.col(i).array() * 3.0; // Scale to cover typical normalized range
+    }
+    
+    // Get baseline predictions
+    Eigen::VectorXd baseline_pred = predict(X_test);
+    
+    // Compute baseline MSE (irrelevant for importance calculation but needed for scale)
+    double baseline_mse = baseline_pred.array().square().mean();
+    
+    // Store feature importance scores
+    std::vector<double> scores(nFeatures);
+    
+    // For each feature, calculate permutation importance
+    for (int i = 0; i < nFeatures; ++i) {
+        // Create a copy of the test data
+        Eigen::MatrixXd X_permuted = X_test;
+        
+        // Permute the current feature
+        Eigen::VectorXd feature = X_test.col(i);
+        std::shuffle(feature.data(), feature.data() + feature.size(), gen);
+        X_permuted.col(i) = feature;
+        
+        // Get predictions with permuted feature
+        Eigen::VectorXd permuted_pred = predict(X_permuted);
+        
+        // Calculate MSE with permuted feature
+        double permuted_mse = (permuted_pred - baseline_pred).array().square().mean();
+        
+        // Importance is the increase in error
+        scores[i] = permuted_mse;
+    }
+    
+    // Normalize scores
+    double sum = std::accumulate(scores.begin(), scores.end(), 0.0);
+    
+    // Handle case where all scores are zero
+    if (sum < 1e-10) {
+        for (int i = 0; i < nFeatures; ++i) {
+            std::string name = (i < inputVariableNames.size()) ? inputVariableNames[i] : "Variable_" + std::to_string(i+1);
+            importance[name] = 1.0 / nFeatures;
+        }
+    } else {
+        // Normalize to sum to 1
+        for (int i = 0; i < nFeatures; ++i) {
+            std::string name = (i < inputVariableNames.size()) ? inputVariableNames[i] : "Variable_" + std::to_string(i+1);
+            importance[name] = scores[i] / sum;
+        }
+    }
+    
+    return importance;
 } 
