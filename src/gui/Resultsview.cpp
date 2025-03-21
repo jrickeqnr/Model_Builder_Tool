@@ -848,6 +848,7 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     int headerHeight = 40;
     int bottomButtonsHeight = 40;
     int equationHeight = 60;
+    int subtitleHeight = 25;  // Height for the model type subtitle
     
     // Create title label
     modelTitleLabel = new Fl_Box(x + margin, y + margin, w - 2*margin, headerHeight, "Model Results");
@@ -856,27 +857,27 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     modelTitleLabel->labelfont(FL_BOLD);
     
     // Create subtitle label
-    modelSubtitleLabel = new Fl_Box(x + margin, y + margin + headerHeight, w - 2*margin, 25, "");
+    modelSubtitleLabel = new Fl_Box(x + margin, y + margin + headerHeight, w - 2*margin, subtitleHeight, "");
     modelSubtitleLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
     modelSubtitleLabel->labelsize(14);
     modelSubtitleLabel->labelfont(FL_ITALIC);
     
-    // Create equation display box
-    Fl_Box* equationLabel = new Fl_Box(x + margin, y + margin + headerHeight + 30, 
+    // Create equation display box (moved down by subtitleHeight)
+    Fl_Box* equationLabel = new Fl_Box(x + margin, y + margin + headerHeight + subtitleHeight + 5, 
                                       w - 2*margin, equationHeight, "Regression Equation:");
     equationLabel->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
     equationLabel->labelsize(14);
     equationLabel->labelfont(FL_BOLD);
     
-    equationDisplay = new Fl_Box(x + margin + 20, y + margin + headerHeight + 55, 
+    equationDisplay = new Fl_Box(x + margin + 20, y + margin + headerHeight + subtitleHeight + 30, 
                                 w - 2*margin - 40, equationHeight - 20, "");
     equationDisplay->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
     equationDisplay->labelsize(14);
     equationDisplay->box(FL_BORDER_BOX);
     
-    // Create main display area
-    int contentY = y + margin + headerHeight + equationHeight + 10;
-    int contentHeight = h - margin*2 - headerHeight - equationHeight - 10 - bottomButtonsHeight - 10;
+    // Create main display area (moved down by subtitleHeight)
+    int contentY = y + margin + headerHeight + subtitleHeight + equationHeight + 15;
+    int contentHeight = h - margin*2 - headerHeight - subtitleHeight - equationHeight - 15 - bottomButtonsHeight - 10;
     int tableWidth = (w - margin*3) / 2;
     
     // Parameters group (left side)
@@ -1129,15 +1130,24 @@ void ResultsView::createPlots() {
 
     plotNavigator->createPlot(
         dataFrame, model,
+        "timeseries", 
+        "Time Series Plot"
+    );
+
+    plotNavigator->createPlot(
+        dataFrame, model,
         "importance", 
         "Feature Importance"
     );
     
-    plotNavigator->createPlot(
-        dataFrame, model,
-        "residual", 
-        "Residual Plot"
-    );
+    // Only create residual plot for non-linear regression models
+    if (model->getName() != "Linear Regression") {
+        plotNavigator->createPlot(
+            dataFrame, model,
+            "residual", 
+            "Residual Plot"
+        );
+    }
 
     // Add model-specific plots
     std::string modelName = model->getName();
