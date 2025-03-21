@@ -40,17 +40,21 @@ MainWindow::MainWindow(int width, int height, const char* title)
     headerLabel->labelfont(FL_BOLD);
     headerLabel->labelsize(18);
     
-    // Create status bar
-    statusBar = new Fl_Box(0, height - 30, width, 30, "Ready");
-    statusBar->box(FL_FLAT_BOX);
-    statusBar->color(fl_rgb_color(240, 240, 240));
-    statusBar->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    
     // Create panels for each stage
     int panelX = 0;
     int panelY = 70;
     int panelW = width;
     int panelH = height - 100;
+    
+    // Create status bar - ensure it's fully initialized with a proper label and covers the bottom area
+    statusBar = new Fl_Box(0, height - 30, width, 30);
+    statusBar->box(FL_FLAT_BOX);
+    statusBar->color(fl_rgb_color(240, 240, 240));
+    statusBar->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    statusBar->copy_label("Ready");
+    
+    // Set status bar as a resizable component to ensure it fills the bottom
+    resizable(statusBar);
     
     LOG_INFO("Creating FileSelector", "MainWindow");
     fileSelector = new FileSelector(panelX, panelY, panelW, panelH);
@@ -107,9 +111,6 @@ MainWindow::MainWindow(int width, int height, const char* title)
     // Initialize UI based on current state
     updateUI();
     
-    // Set resizable
-    resizable(this);
-    
     end();
     LOG_INFO("MainWindow created", "MainWindow");
 }
@@ -122,7 +123,7 @@ MainWindow::~MainWindow() {
 void MainWindow::handleFileSelected(const std::string& filePath) {
     LOG_INFO("File selected: " + filePath, "MainWindow");
     currentFilePath = filePath;
-    statusBar->label("Loading CSV file...");
+    statusBar->copy_label("Loading CSV file...");
     
     try {
         // Read the CSV file
@@ -134,7 +135,7 @@ void MainWindow::handleFileSelected(const std::string& filePath) {
         char statusMsg[256];
         snprintf(statusMsg, sizeof(statusMsg), "CSV file loaded successfully: %zu rows, %zu columns", 
                 dataFrame->rowCount(), dataFrame->columnCount());
-        statusBar->label(statusMsg);
+        statusBar->copy_label(statusMsg);
         LOG_INFO(statusMsg, "MainWindow");
         
         // Move to next step
@@ -143,7 +144,7 @@ void MainWindow::handleFileSelected(const std::string& filePath) {
     } catch (const std::exception& e) {
         LOG_ERROR("Failed to load CSV file: " + std::string(e.what()), "MainWindow");
         fl_alert("Failed to load CSV file: %s", e.what());
-        statusBar->label("Failed to load CSV file");
+        statusBar->copy_label("Failed to load CSV file");
     }
 }
 
@@ -205,7 +206,7 @@ void MainWindow::handleVariablesSelected(const std::vector<std::string>& inputVa
     if (currentHyperparameters.size() > 0 && currentModelType != "Linear Regression") {
         statusMsg += " with custom hyperparameters";
     }
-    statusBar->label(statusMsg.c_str());
+    statusBar->copy_label(statusMsg.c_str());
     
     // Fit model
     try {
@@ -217,7 +218,7 @@ void MainWindow::handleVariablesSelected(const std::vector<std::string>& inputVa
         );
         
         // Fit model
-        statusBar->label("Fitting model...");
+        statusBar->copy_label("Fitting model...");
         Fl::check();  // Update the UI to show the status message
         
         // Pass variable names to the model when fitting
@@ -232,15 +233,15 @@ void MainWindow::handleVariablesSelected(const std::vector<std::string>& inputVa
             currentState = State::Results;
             updateUI();
             
-            statusBar->label("Model fitted successfully");
+            statusBar->copy_label("Model fitted successfully");
             handleModelFitted();
         } else {
             fl_alert("Failed to fit model");
-            statusBar->label("Failed to fit model");
+            statusBar->copy_label("Failed to fit model");
         }
     } catch (const std::exception& e) {
         fl_alert("Error fitting model: %s", e.what());
-        statusBar->label("Error fitting model");
+        statusBar->copy_label("Error fitting model");
     }
 }
 
@@ -295,7 +296,7 @@ void MainWindow::handleStartOver() {
     
     // Update UI
     updateUI();
-    statusBar->label("Started new analysis");
+    statusBar->copy_label("Started new analysis");
 }
 
 void MainWindow::updateUI() {
@@ -312,21 +313,21 @@ void MainWindow::updateUI() {
     switch (currentState) {
         case State::FileSelection:
             LOG_INFO("Showing FileSelector", "MainWindow");
-            headerLabel->label("Step 1: Select CSV File");
+            headerLabel->copy_label("Step 1: Select CSV File");
             fileSelector->show();
             currentPanel = fileSelector;
             break;
             
         case State::ModelSelection:
             LOG_INFO("Showing ModelSelector", "MainWindow");
-            headerLabel->label("Step 2: Select Model Type");
+            headerLabel->copy_label("Step 2: Select Model Type");
             modelSelector->show();
             currentPanel = modelSelector;
             break;
             
         case State::HyperparameterSelection:
             LOG_INFO("Showing HyperparameterSelector", "MainWindow");
-            headerLabel->label("Step 3: Configure Hyperparameters");
+            headerLabel->copy_label("Step 3: Configure Hyperparameters");
             hyperparameterSelector->show();
             currentPanel = hyperparameterSelector;
             break;
@@ -334,9 +335,9 @@ void MainWindow::updateUI() {
         case State::VariableSelection:
             LOG_INFO("Showing VariableSelector", "MainWindow");
             if (currentModelType != "Linear Regression") {
-                headerLabel->label("Step 4: Select Variables");
+                headerLabel->copy_label("Step 4: Select Variables");
             } else {
-                headerLabel->label("Step 3: Select Variables");
+                headerLabel->copy_label("Step 3: Select Variables");
             }
             variableSelector->show();
             if (dataFrame) {
@@ -347,14 +348,15 @@ void MainWindow::updateUI() {
             
         case State::Results:
             LOG_INFO("Showing ResultsView", "MainWindow");
-            headerLabel->label("Results");
+            headerLabel->copy_label("Results");
             resultsView->show();
             currentPanel = resultsView;
             break;
     }
     
-    // Redraw the window
-    redraw();
+    // Redraw the entire window to ensure all components are properly displayed
+    this->redraw();
+    Fl::check();  // Process any pending events
     LOG_INFO("UI updated", "MainWindow");
 }
 

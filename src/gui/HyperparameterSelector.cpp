@@ -75,24 +75,17 @@ void HyperparameterSelector::setModelType(const std::string& modelType)
 void HyperparameterSelector::clearUI()
 {
     LOG_DEBUG("Clearing UI", "HyperparameterSelector");
-    parametersGroup->begin();
     
-    // Remove all parameter widgets
-    for (auto& param : paramWidgets) {
-        LOG_DEBUG("Removing widget for parameter: " + param.name, "HyperparameterSelector");
-        if (param.widget) {
-            parametersGroup->remove(param.widget);
-            delete param.widget;
-        }
-        if (param.autoToggle) {
-            // No need to free user_data anymore
-            parametersGroup->remove(param.autoToggle);
-            delete param.autoToggle;
-        }
+    // First, clear all existing children by removing them
+    while (parametersGroup->children() > 0) {
+        Fl_Widget* widget = parametersGroup->child(0);
+        parametersGroup->remove(widget);
+        delete widget;
     }
     
+    // Clear the parameter widgets vector
     paramWidgets.clear();
-    parametersGroup->end();
+    
     parametersGroup->redraw();
     LOG_DEBUG("UI cleared", "HyperparameterSelector");
 }
