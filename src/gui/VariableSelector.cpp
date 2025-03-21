@@ -55,14 +55,10 @@ void VariableSelector::initUI() {
 }
 
 void VariableSelector::createHeader() {
-    auto* title = new Fl_Box(x(), y() + MARGIN, w(), HEADER_HEIGHT, "Step 3: Select Variables");
-    title->align(FL_ALIGN_CENTER);
-    title->labelsize(16);
-    title->labelfont(FL_BOLD);
 
     auto* desc = new Fl_Box(x() + MARGIN, y() + MARGIN + HEADER_HEIGHT,
                           w() - 2 * MARGIN, DESC_HEIGHT,
-                          "Select input and target variables for your regression model:");
+                          "Choose variables from below to build your regression model:");
     desc->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
     desc->labelsize(12);
 }
