@@ -39,22 +39,35 @@ static Fl_Menu_Item menuItems[] = {
 MainWindow::MainWindow(int width, int height, const char* title)
     : Fl_Window(width, height, title), currentState(State::FileSelection)
 {
-    LOG_INFO("Creating MainWindow", "MainWindow");
+    LOG_INFO("Creating MainWindow with dimensions: " + std::to_string(width) + "x" + std::to_string(height), "MainWindow");
     
     // Set window properties
     size_range(800, 600);
+    LOG_DEBUG("Set minimum window size to 800x600", "MainWindow");
     
     // Create menu bar
+    LOG_DEBUG("Creating menu bar at position (0, 0) with dimensions: " + std::to_string(width) + "x30", "MainWindow");
     menuBar = new Fl_Menu_Bar(0, 0, width, 30);
-    menuBar->copy(menuItems);
-    menuBar->box(FL_FLAT_BOX);
-    menuBar->color(fl_rgb_color(240, 240, 240));
+    if (!menuBar) {
+        LOG_ERR("Failed to create menu bar", "MainWindow");
+    } else {
+        menuBar->copy(menuItems);
+        menuBar->box(FL_FLAT_BOX);
+        menuBar->color(fl_rgb_color(240, 240, 240));
+        LOG_DEBUG("Menu bar created successfully", "MainWindow");
+    }
     
     // Create header
+    LOG_DEBUG("Creating header label at position (0, 30) with dimensions: " + std::to_string(width) + "x40", "MainWindow");
     headerLabel = new Fl_Box(0, 30, width, 40, "Step 1: Select CSV File");
-    headerLabel->box(FL_FLAT_BOX);
-    headerLabel->labelfont(FL_BOLD);
-    headerLabel->labelsize(18);
+    if (!headerLabel) {
+        LOG_ERR("Failed to create header label", "MainWindow");
+    } else {
+        headerLabel->box(FL_FLAT_BOX);
+        headerLabel->labelfont(FL_BOLD);
+        headerLabel->labelsize(18);
+        LOG_DEBUG("Header label created successfully", "MainWindow");
+    }
     
     // Create panels for each stage
     int panelX = 0;
@@ -62,78 +75,131 @@ MainWindow::MainWindow(int width, int height, const char* title)
     int panelW = width;
     int panelH = height - 100;
     
+    LOG_DEBUG("Panel dimensions calculated as: position (" + std::to_string(panelX) + 
+              ", " + std::to_string(panelY) + ") with size " + std::to_string(panelW) + 
+              "x" + std::to_string(panelH), "MainWindow");
+    
     // Create status bar - ensure it's fully initialized with a proper label and covers the bottom area
+    LOG_DEBUG("Creating status bar at position (0, " + std::to_string(height - 30) + 
+              ") with dimensions: " + std::to_string(width) + "x30", "MainWindow");
+    
     statusBar = new Fl_Box(0, height - 30, width, 30);
-    statusBar->box(FL_FLAT_BOX);
-    statusBar->color(fl_rgb_color(240, 240, 240));
-    statusBar->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    statusBar->copy_label("Ready");
+    if (!statusBar) {
+        LOG_ERR("Failed to create status bar", "MainWindow");
+    } else {
+        statusBar->box(FL_FLAT_BOX);
+        statusBar->color(fl_rgb_color(240, 240, 240));
+        statusBar->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+        statusBar->copy_label("Ready");
+        LOG_DEBUG("Status bar created successfully", "MainWindow");
+    }
     
     // Set status bar as a resizable component to ensure it fills the bottom
+    LOG_DEBUG("Setting status bar as resizable component", "MainWindow");
     resizable(statusBar);
     
-    LOG_INFO("Creating FileSelector", "MainWindow");
+    LOG_INFO("Creating FileSelector at position (" + std::to_string(panelX) + 
+             ", " + std::to_string(panelY) + ") with dimensions: " + 
+             std::to_string(panelW) + "x" + std::to_string(panelH), "MainWindow");
+    
     fileSelector = new FileSelector(panelX, panelY, panelW, panelH);
-    fileSelector->setFileSelectedCallback([this](const std::string& filePath) {
-        this->handleFileSelected(filePath);
-    });
+    if (!fileSelector) {
+        LOG_ERR("Failed to create FileSelector", "MainWindow");
+    } else {
+        fileSelector->setFileSelectedCallback([this](const std::string& filePath) {
+            this->handleFileSelected(filePath);
+        });
+        LOG_DEBUG("FileSelector created and callback set", "MainWindow");
+    }
     
-    LOG_INFO("Creating ModelSelector", "MainWindow");
+    LOG_INFO("Creating ModelSelector at position (" + std::to_string(panelX) + 
+             ", " + std::to_string(panelY) + ") with dimensions: " + 
+             std::to_string(panelW) + "x" + std::to_string(panelH), "MainWindow");
+    
     modelSelector = new ModelSelector(panelX, panelY, panelW, panelH);
-    modelSelector->setModelSelectedCallback([this](const std::string& modelType) {
-        this->handleModelSelected(modelType);
-    });
-    modelSelector->setBackButtonCallback([this]() {
-        this->handleBackButton();
-    });
+    if (!modelSelector) {
+        LOG_ERR("Failed to create ModelSelector", "MainWindow");
+    } else {
+        modelSelector->setModelSelectedCallback([this](const std::string& modelType) {
+            this->handleModelSelected(modelType);
+        });
+        LOG_DEBUG("ModelSelector created and callback set", "MainWindow");
+    }
     
-    LOG_INFO("Creating HyperparameterSelector", "MainWindow");
+    LOG_INFO("Creating HyperparameterSelector at position (" + std::to_string(panelX) + 
+             ", " + std::to_string(panelY) + ") with dimensions: " + 
+             std::to_string(panelW) + "x" + std::to_string(panelH), "MainWindow");
+    
     hyperparameterSelector = new HyperparameterSelector(panelX, panelY, panelW, panelH);
-    hyperparameterSelector->setHyperparametersSelectedCallback(
-        [this](const std::unordered_map<std::string, std::string>& hyperparams) {
-            this->handleHyperparametersSelected(hyperparams);
-        }
-    );
-    hyperparameterSelector->setBackButtonCallback([this]() {
-        this->handleBackButton();
-    });
+    if (!hyperparameterSelector) {
+        LOG_ERR("Failed to create HyperparameterSelector", "MainWindow");
+    } else {
+        hyperparameterSelector->setHyperparametersSelectedCallback(
+            [this](const std::unordered_map<std::string, std::string>& hyperparams) {
+                this->handleHyperparametersSelected(hyperparams);
+            }
+        );
+        LOG_DEBUG("HyperparameterSelector created and callback set", "MainWindow");
+    }
     
-    LOG_INFO("Creating VariableSelector", "MainWindow");
+    LOG_INFO("Creating VariableSelector at position (" + std::to_string(panelX) + 
+             ", " + std::to_string(panelY) + ") with dimensions: " + 
+             std::to_string(panelW) + "x" + std::to_string(panelH), "MainWindow");
+    
     variableSelector = new VariableSelector(panelX, panelY, panelW, panelH);
-    variableSelector->setVariablesSelectedCallback(
-        [this](const std::vector<std::string>& inputVars, const std::string& targetVar) {
-            this->handleVariablesSelected(inputVars, targetVar);
-        }
-    );
-    variableSelector->setBackButtonCallback([this]() {
-        this->handleBackButton();
-    });
+    if (!variableSelector) {
+        LOG_ERR("Failed to create VariableSelector", "MainWindow");
+    } else {
+        variableSelector->setVariablesSelectedCallback(
+            [this](const std::vector<std::string>& inputVars, const std::string& targetVar) {
+                this->handleVariablesSelected(inputVars, targetVar);
+            }
+        );
+        LOG_DEBUG("VariableSelector created and callback set", "MainWindow");
+    }
     
-    LOG_INFO("Creating ResultsView", "MainWindow");
+    LOG_INFO("Creating ResultsView at position (" + std::to_string(panelX) + 
+             ", " + std::to_string(panelY) + ") with dimensions: " + 
+             std::to_string(panelW) + "x" + std::to_string(panelH), "MainWindow");
+    
     resultsView = new ResultsView(panelX, panelY, panelW, panelH);
-    resultsView->setBackButtonCallback([this]() {
-        this->handleBackButton();
-    });
+    if (!resultsView) {
+        LOG_ERR("Failed to create ResultsView", "MainWindow");
+    } else {
+        LOG_DEBUG("ResultsView created successfully", "MainWindow");
+    }
     
     // Hide all panels except file selector initially
-    modelSelector->hide();
-    hyperparameterSelector->hide();
-    variableSelector->hide();
-    resultsView->hide();
+    LOG_DEBUG("Hiding all panels except FileSelector", "MainWindow");
+    if (modelSelector) modelSelector->hide();
+    if (hyperparameterSelector) hyperparameterSelector->hide();
+    if (variableSelector) variableSelector->hide();
+    if (resultsView) resultsView->hide();
     
     // Set current panel
     currentPanel = fileSelector;
+    LOG_DEBUG("Set current panel to FileSelector", "MainWindow");
     
     // Initialize UI based on current state
     updateUI();
     
     end();
-    LOG_INFO("MainWindow created", "MainWindow");
+    LOG_INFO("MainWindow initialization completed", "MainWindow");
 }
 
 MainWindow::~MainWindow() {
     LOG_INFO("Destroying MainWindow", "MainWindow");
-    // Clean up resources
+    
+    // Clean up UI components
+    LOG_DEBUG("Cleaning up UI components", "MainWindow");
+    // FLTK will automatically clean up child widgets
+    
+    // Clean up data
+    LOG_DEBUG("Cleaning up data and model", "MainWindow");
+    model.reset();
+    dataFrame.reset();
+    
+    LOG_INFO("MainWindow destruction completed", "MainWindow");
 }
 
 void MainWindow::handleFileSelected(const std::string& filePath) {
@@ -144,8 +210,17 @@ void MainWindow::handleFileSelected(const std::string& filePath) {
     try {
         // Read the CSV file
         CSVReader reader;
-        LOG_INFO("Reading CSV file", "MainWindow");
+        LOG_INFO("Reading CSV file using CSVReader", "MainWindow");
         dataFrame = std::make_shared<DataFrame>(reader.readCSV(filePath));
+        
+        if (!dataFrame) {
+            LOG_ERR("Failed to create DataFrame from CSV", "MainWindow");
+            statusBar->copy_label("Failed to load CSV file");
+            return;
+        }
+        
+        LOG_INFO("DataFrame created successfully with " + std::to_string(dataFrame->getNumRows()) + 
+                 " rows and " + std::to_string(dataFrame->columnCount()) + " columns", "MainWindow");
         
         // Update status
         char statusMsg[256];
@@ -156,6 +231,7 @@ void MainWindow::handleFileSelected(const std::string& filePath) {
         
         // Move to next step
         currentState = State::ModelSelection;
+        LOG_INFO("Transitioning to ModelSelection state", "MainWindow");
         updateUI();
     } catch (const std::exception& e) {
         LOG_ERR("Failed to load CSV file: " + std::string(e.what()), "MainWindow");
@@ -245,8 +321,8 @@ void MainWindow::fitModelAndShowResults() {
         bool success = model->fit(X, y, selectedInputVariables, selectedTargetVariable);
         
         if (success) {
-            // Configure results view based on model type
-            configureResultsView();
+            // Save the dataframe in the model
+            model->setDataFrame(dataFrame);
             
             // Move to results step
             currentState = State::Results;
@@ -265,22 +341,12 @@ void MainWindow::fitModelAndShowResults() {
 }
 
 void MainWindow::configureResultsView() {
-    // Update results view with model and data
+    // Update results view with model
     resultsView->setModel(model);
-    resultsView->setData(dataFrame, selectedInputVariables, selectedTargetVariable);
-    
-    // Configure results view based on model type
-    resultsView->setModelType(currentModelType);
-    
-    // Pass hyperparameters to results view if needed
-    if (!currentHyperparameters.empty()) {
-        resultsView->setHyperparameters(currentHyperparameters);
-    }
 }
 
 void MainWindow::handleModelFitted() {
-    // Display model results
-    resultsView->updateResults();
+    // Nothing to do here, all handled in onModelSelected
 }
 
 void MainWindow::handleBackButton() {

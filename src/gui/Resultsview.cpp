@@ -1,667 +1,594 @@
-#include <iostream>
 #include "gui/ResultsView.h"
-#include "gui/PlotWidget.h"
-#include "gui/PlotNavigator.h"
 #include "utils/Logger.h"
+#include "utils/PlottingUtility.h"
 #include <FL/Fl.H>
-#include <FL/Fl_Group.H>
-#include <FL/Fl_Box.H>
-#include <FL/Fl_Button.H>
-#include <FL/Fl_File_Chooser.H>
 #include <FL/fl_draw.H>
-#include <FL/fl_ask.H>
-#include <fstream>
-#include <iomanip>
-#include <cstdio>
-#include <cstdlib>
-#include <array>
+#include <FL/fl_message.H>
 #include <sstream>
-#include <chrono>
-#include <ctime>
-#include <filesystem>
-#include <algorithm>  // For std::min
-#include <memory>    // For std::unique_ptr
+#include <iomanip>
+#include <algorithm>
 
 // ResultsView implementation
 ResultsView::ResultsView(int x, int y, int w, int h)
-    : Fl_Group(x, y, w, h),
-      exportDialog(std::make_unique<ExportDialog>(400, 300, "Export Options"))
+    : Fl_Group(x, y, w, h)
 {
+    LOG_INFO("Constructing ResultsView", "ResultsView");
+    
+    // Set up the main layout
     begin();
     
-    // Set group properties
-    box(FL_FLAT_BOX);
-    color(FL_BACKGROUND_COLOR);
+    int padding = 10;
+    int topHeight = 150;  // Height for statistics and parameters
+    int bottomHeight = h - topHeight - 3 * padding;
     
-    // Constants for layout
-    int margin = 20;
-    int headerHeight = 40;
-    int bottomButtonsHeight = 40;
-    int equationHeight = 60;
-    int subtitleHeight = 25;  // Height for the model type subtitle
+    LOG_DEBUG("Creating statistics panel", "ResultsView");
+    // Statistics panel
+    statisticsPanel = new Fl_Group(x + padding, y + padding, w / 2 - padding * 1.5, topHeight);
+    statisticsPanel->box(FL_DOWN_BOX);
+    statisticsPanel->color(FL_WHITE);
+    statisticsPanel->begin();
     
-    // Create title label
-    modelTitleLabel = new Fl_Box(x + margin, y + margin, w - 2*margin, headerHeight, "Model Results");
-    modelTitleLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    modelTitleLabel->labelsize(18);
-    modelTitleLabel->labelfont(FL_BOLD);
+    // Statistics title
+    statisticsTitle = new Fl_Box(padding, padding, statisticsPanel->w() - 2 * padding, 25, "Model Statistics");
+    statisticsTitle->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    statisticsTitle->labelfont(FL_BOLD);
     
-    // Create subtitle label
-    modelSubtitleLabel = new Fl_Box(x + margin, y + margin + headerHeight, w - 2*margin, subtitleHeight, "");
-    modelSubtitleLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    modelSubtitleLabel->labelsize(14);
-    modelSubtitleLabel->labelfont(FL_ITALIC);
+    // Statistics display
+    statisticsDisplay = new Fl_Text_Display(padding, statisticsTitle->y() + statisticsTitle->h() + padding,
+                                         statisticsPanel->w() - 2 * padding, statisticsPanel->h() - statisticsTitle->h() - 3 * padding);
+    statisticsBuffer = new Fl_Text_Buffer();
+    statisticsDisplay->buffer(statisticsBuffer);
     
-    // Create equation display box (moved down by subtitleHeight)
-    Fl_Box* equationLabel = new Fl_Box(x + margin, y + margin + headerHeight + subtitleHeight + 5, 
-                                      w - 2*margin, equationHeight, "Regression Equation:");
-    equationLabel->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
-    equationLabel->labelsize(14);
-    equationLabel->labelfont(FL_BOLD);
+    statisticsPanel->end();
     
-    equationDisplay = new Fl_Box(x + margin + 20, y + margin + headerHeight + subtitleHeight + 30, 
-                                w - 2*margin - 40, equationHeight - 20, "");
-    equationDisplay->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
-    equationDisplay->labelsize(14);
-    equationDisplay->box(FL_BORDER_BOX);
+    LOG_DEBUG("Creating parameters panel", "ResultsView");
+    // Parameters panel
+    parametersPanel = new Fl_Group(statisticsPanel->x() + statisticsPanel->w() + padding, y + padding, 
+                                 w / 2 - padding * 1.5, topHeight);
+    parametersPanel->box(FL_DOWN_BOX);
+    parametersPanel->color(FL_WHITE);
+    parametersPanel->begin();
     
-    // Create main display area (moved down by subtitleHeight)
-    int contentY = y + margin + headerHeight + subtitleHeight + equationHeight + 15;
-    int contentHeight = h - margin*2 - headerHeight - subtitleHeight - equationHeight - 15 - bottomButtonsHeight - 10;
-    int tableWidth = (w - margin*3) / 2;
+    // Parameters title
+    parametersTitle = new Fl_Box(padding, padding, parametersPanel->w() - 2 * padding, 25, "Model Parameters");
+    parametersTitle->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+    parametersTitle->labelfont(FL_BOLD);
     
-    // Parameters group (left side)
-    parametersGroup = new Fl_Group(x + margin, contentY, tableWidth, contentHeight/2);
-    parametersGroup->box(FL_BORDER_BOX);
-    parametersGroup->begin();
+    // Parameters display
+    parametersDisplay = new Fl_Text_Display(padding, parametersTitle->y() + parametersTitle->h() + padding,
+                                          parametersPanel->w() - 2 * padding, parametersPanel->h() - parametersTitle->h() - 3 * padding);
+    parametersBuffer = new Fl_Text_Buffer();
+    parametersDisplay->buffer(parametersBuffer);
     
-    Fl_Box* parametersLabel = new Fl_Box(x + margin + 10, contentY + 10, tableWidth - 20, 30, "Model Parameters");
-    parametersLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    parametersLabel->labelsize(14);
-    parametersLabel->labelfont(FL_BOLD);
+    parametersPanel->end();
     
-    parametersTable = new DataTable(x + margin + 10, contentY + 50, 
-                                  tableWidth - 20, contentHeight/2 - 60);
+    LOG_DEBUG("Creating plots panel", "ResultsView");
+    // Plots panel
+    plotsPanel = new Fl_Group(x + padding, statisticsPanel->y() + statisticsPanel->h() + padding, 
+                            w - 2 * padding, bottomHeight);
+    plotsPanel->box(FL_DOWN_BOX);
+    plotsPanel->color(FL_WHITE);
+    plotsPanel->begin();
     
-    parametersGroup->end();
+    // Create the export button
+    exportButton = new Fl_Button(plotsPanel->w() - 110, plotsPanel->h() - 40,
+                               100, 30, "Export Results");
+    exportButton->callback(exportButtonCallback, this);
     
-    // Statistics group (left side, bottom half)
-    statisticsGroup = new Fl_Group(x + margin, contentY + contentHeight/2 + 10, tableWidth, contentHeight/2 - 10);
-    statisticsGroup->box(FL_BORDER_BOX);
-    statisticsGroup->begin();
-    
-    Fl_Box* statisticsLabel = new Fl_Box(x + margin + 10, contentY + contentHeight/2 + 20, tableWidth - 20, 30, "Model Statistics");
-    statisticsLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    statisticsLabel->labelsize(14);
-    statisticsLabel->labelfont(FL_BOLD);
-    
-    statisticsTable = new DataTable(x + margin + 10, contentY + contentHeight/2 + 60, 
-                                  tableWidth - 20, contentHeight/2 - 70);
-    
-    statisticsGroup->end();
-    
-    // Plot navigator (right side)
-    plotNavigator = new PlotNavigator(x + margin*2 + tableWidth, contentY, tableWidth, contentHeight);
-    
-    // Create bottom buttons
-    int buttonY = y + h - margin - bottomButtonsHeight;
-    
-    backButton = new Fl_Button(x + margin, buttonY, 100, bottomButtonsHeight, "Back");
-    backButton->callback(backButtonCallback_static, this);
-    
-    exportButton = new Fl_Button(x + w - margin - 150, buttonY, 150, bottomButtonsHeight, "Export Results");
-    exportButton->callback(exportButtonCallback_static, this);
+    plotsPanel->end();
     
     end();
-
-    // Initialize the export dialog
-    exportDialog->onExport = [this](const ExportDialog::ExportOptions& options) {
-        exportResults(options);
-    };
+    
+    // Set resize behavior
+    resizable(plotsPanel);
+    
+    // Initialize member variables
+    model = nullptr;
+    dataFrame = nullptr;
+    plottingInitialized = false;
+    currentModelIndex = 0;
+    showModelNavigation = false;
+    
+    LOG_INFO("ResultsView construction complete, size: " + 
+             std::to_string(w) + "x" + std::to_string(h), "ResultsView");
 }
 
 ResultsView::~ResultsView() {
-    // FLTK handles widget destruction through parent-child relationship
-}
-
-void ResultsView::setModel(std::shared_ptr<Model> model) {
-    this->model = model;
-}
-
-void ResultsView::setData(std::shared_ptr<DataFrame> dataFrame, 
-                         const std::vector<std::string>& inputVariables, 
-                         const std::string& targetVariable) {
-    this->dataFrame = dataFrame;
-    this->inputVariables = inputVariables;
-    this->targetVariable = targetVariable;
-}
-
-void ResultsView::setModelType(const std::string& modelType) {
-    this->modelType = modelType;
-    if (modelSubtitleLabel) {
-        modelSubtitleLabel->copy_label(("Model Type: " + modelType).c_str());
-    }
-}
-
-void ResultsView::setHyperparameters(const std::unordered_map<std::string, std::string>& hyperparams) {
-    this->hyperparameters = hyperparams;
-}
-
-void ResultsView::updateResults() {
-    if (!model || !dataFrame) {
-        return;
-    }
+    LOG_INFO("Destroying ResultsView", "ResultsView");
     
-    // Clear existing plots
-    plotNavigator->clearPlots();
+    delete statisticsBuffer;
+    delete parametersBuffer;
     
-    // Update displays based on the model type
-    if (modelType == "Linear Regression") {
-        updateLinearRegressionDisplay();
-    } else {
-        // For now, all models use the same display until they are implemented
-        // This will be updated as each model is implemented
-        // Replaced LOG_INFO with comment to fix build error
-        updateLinearRegressionDisplay();
-    }
-    
-    // Redraw the widget
-    redraw();
-}
-
-void ResultsView::updateParametersDisplay() {
-    if (!model || !parametersTable) {
-        return;
-    }
-    
-    // Get parameters
-    auto parameters = model->getParameters();
-    
-    // Reorganize parameters to show intercept first, then coefficients in order
-    std::unordered_map<std::string, double> orderedParams;
-    
-    // Add intercept first
-    auto interceptIt = parameters.find("intercept");
-    if (interceptIt != parameters.end()) {
-        orderedParams["Intercept"] = interceptIt->second;
-    }
-    
-    // Then add coefficients with variable names
-    for (const auto& varName : model->getVariableNames()) {
-        auto coefIt = parameters.find(varName);
-        if (coefIt != parameters.end()) {
-            orderedParams[varName + " (coefficient)"] = coefIt->second;
+    // Clean up PlottingUtility if initialized
+    if (plottingInitialized) {
+        try {
+            LOG_DEBUG("Cleaning up PlottingUtility", "ResultsView");
+            PlottingUtility::getInstance().cleanup();
+            LOG_DEBUG("PlottingUtility cleanup successful", "ResultsView");
+        } catch (const std::exception& e) {
+            LOG_ERR("Error cleaning up PlottingUtility: " + std::string(e.what()), "ResultsView");
+        } catch (...) {
+            LOG_ERR("Unknown error cleaning up PlottingUtility", "ResultsView");
         }
     }
     
-    // Update table with ordered parameter values
-    parametersTable->setData(orderedParams);
+    LOG_INFO("ResultsView destroyed", "ResultsView");
+}
+
+void ResultsView::layout() {
+    LOG_INFO("ResultsView::layout() called", "ResultsView");
+    
+    // Do not call the base layout() method since it doesn't exist in Fl_Group
+    
+    // Get dimensions for layout
+    int padding = 10;
+    int w = this->w();
+    int h = this->h();
+    LOG_DEBUG("ResultsView dimensions: " + std::to_string(w) + "x" + std::to_string(h), "ResultsView");
+    
+    try {
+        // Initialize PlottingUtility if not already done
+        if (!plottingInitialized && plotsPanel) {
+            LOG_INFO("Initializing PlottingUtility", "ResultsView");
+            try {
+                PlottingUtility::getInstance().initialize(plotsPanel);
+                plottingInitialized = true;
+                LOG_INFO("PlottingUtility initialized successfully", "ResultsView");
+            } catch (const std::exception& e) {
+                LOG_ERR("Failed to initialize PlottingUtility: " + std::string(e.what()), "ResultsView");
+                drawFallbackPlotDisplay();
+                return;
+            } catch (...) {
+                LOG_ERR("Unknown error initializing PlottingUtility", "ResultsView");
+                drawFallbackPlotDisplay();
+                return;
+            }
+        }
+        
+        // Position UI components
+        LOG_DEBUG("Positioning UI components", "ResultsView");
+        
+        // Calculate panel sizes
+        int topHeight = 150;
+        int bottomHeight = h - topHeight - 3 * padding;
+        
+        // Position statistics and parameters panels
+        if (statisticsPanel && parametersPanel) {
+            statisticsPanel->resize(x() + padding, y() + padding, w / 2 - padding * 1.5, topHeight);
+            parametersPanel->resize(statisticsPanel->x() + statisticsPanel->w() + padding, y() + padding, 
+                                  w / 2 - padding * 1.5, topHeight);
+        }
+        
+        // Position plots panel
+        if (plotsPanel) {
+            plotsPanel->resize(x() + padding, y() + topHeight + 2 * padding, 
+                             w - 2 * padding, bottomHeight);
+            
+            // Position the export button in the bottom right of the plots panel
+            if (exportButton) {
+                exportButton->resize(plotsPanel->x() + plotsPanel->w() - 110, 
+                                   plotsPanel->y() + plotsPanel->h() - 40,
+                                   100, 30);
+            }
+        }
+        
+        // Create plots if model is set
+        if (model) {
+            LOG_DEBUG("Model is set, creating plots", "ResultsView");
+            try {
+                createPlots();
+                LOG_INFO("Plots created successfully", "ResultsView");
+            } catch (const std::exception& e) {
+                LOG_ERR("Failed to create plots: " + std::string(e.what()), "ResultsView");
+                drawFallbackPlotDisplay();
+            } catch (...) {
+                LOG_ERR("Unknown error creating plots", "ResultsView");
+                drawFallbackPlotDisplay();
+            }
+        } else {
+            LOG_ERR("No model available for plotting", "ResultsView");
+            drawFallbackPlotDisplay();
+        }
+    } catch (const std::exception& e) {
+        LOG_ERR("Exception in ResultsView::layout(): " + std::string(e.what()), "ResultsView");
+        drawFallbackPlotDisplay();
+    } catch (...) {
+        LOG_ERR("Unknown exception in ResultsView::layout()", "ResultsView");
+        drawFallbackPlotDisplay();
+    }
+    
+    LOG_INFO("ResultsView::layout() completed", "ResultsView");
+}
+
+void ResultsView::draw() {
+    LOG_DEBUG("ResultsView::draw called", "ResultsView");
+    
+    // Draw the regular Fl_Group elements first
+    Fl_Group::draw();
+    
+    // No need to render plots here, as they are drawn by the PlottingUtility
+    // during the render() calls in createPlots.
+    
+    LOG_DEBUG("ResultsView::draw completed", "ResultsView");
+}
+
+// Helper method to draw a simple fallback when plotting fails
+void ResultsView::drawFallbackPlotDisplay() {
+    LOG_INFO("Drawing fallback plot display", "ResultsView");
+    
+    if (!plotsPanel) {
+        LOG_ERR("No plot area available for fallback display", "ResultsView");
+        return;
+    }
+    
+    // Save current drawing color
+    Fl_Color oldColor = fl_color();
+    
+    // Draw a background for the error message
+    fl_color(FL_BACKGROUND_COLOR);
+    fl_rectf(plotsPanel->x(), plotsPanel->y(), plotsPanel->w(), plotsPanel->h());
+    
+    // Draw a border
+    fl_color(FL_DARK3);
+    fl_rect(plotsPanel->x(), plotsPanel->y(), plotsPanel->w(), plotsPanel->h());
+    
+    // Draw the error message
+    fl_color(FL_RED);
+    fl_font(FL_HELVETICA_BOLD, 14);
+    const char* message = "Error displaying plots";
+    fl_draw(message, 
+            plotsPanel->x() + plotsPanel->w()/2 - fl_width(message)/2, 
+            plotsPanel->y() + plotsPanel->h()/2);
+    
+    fl_font(FL_HELVETICA, 12);
+    const char* submessage = "See log for details";
+    fl_draw(submessage, 
+            plotsPanel->x() + plotsPanel->w()/2 - fl_width(submessage)/2, 
+            plotsPanel->y() + plotsPanel->h()/2 + 20);
+    
+    // Restore previous color
+    fl_color(oldColor);
+    
+    LOG_DEBUG("Fallback plot display drawn", "ResultsView");
+}
+
+void ResultsView::setModel(std::shared_ptr<Model> newModel) {
+    if (!newModel) {
+        LOG_WARN("Attempted to set null model", "ResultsView");
+        return;
+    }
+    
+    LOG_INFO("Setting model: " + newModel->getName(), "ResultsView");
+    model = newModel;
+    
+    // Get DataFrame from model
+    if (model) {
+        dataFrame = model->getDataFrame();
+        if (dataFrame) {
+            LOG_INFO("Got DataFrame with " + std::to_string(dataFrame->getNumRows()) + 
+                     " rows and " + std::to_string(dataFrame->columnCount()) + " columns", "ResultsView");
+        } else {
+            LOG_WARN("Model has no associated DataFrame", "ResultsView");
+        }
+        
+        // Update displays
+        LOG_DEBUG("Updating statistics display", "ResultsView");
+        updateStatisticsDisplay();
+        
+        LOG_DEBUG("Updating parameters display", "ResultsView");
+        updateParametersDisplay();
+        
+        // Create plots for the model
+        LOG_DEBUG("Creating plots", "ResultsView");
+        try {
+            createPlots();
+            LOG_INFO("Plots created successfully", "ResultsView");
+        } catch (const std::exception& e) {
+            LOG_ERR("Error creating plots: " + std::string(e.what()), "ResultsView");
+            drawFallbackPlotDisplay();
+        } catch (...) {
+            LOG_ERR("Unknown error creating plots", "ResultsView");
+            drawFallbackPlotDisplay();
+        }
+        
+        LOG_INFO("Model set successfully", "ResultsView");
+    }
+}
+
+void ResultsView::onModelComparisonSelected(const std::vector<std::shared_ptr<Model>>& models) {
+    if (models.empty()) {
+        LOG_WARN("No models provided for comparison", "ResultsView");
+        return;
+    }
+    
+    LOG_INFO("Model comparison selected with " + 
+             std::to_string(models.size()) + " models", "ResultsView");
+    
+    // Store the models for comparison
+    comparisonModels = models;
+    
+    // Set the current model to the first one
+    currentModelIndex = 0;
+    showModelNavigation = (models.size() > 1);
+    
+    // Set the active model
+    setModel(models[0]);
 }
 
 void ResultsView::updateStatisticsDisplay() {
-    if (!model || !statisticsTable) {
+    if (!model) {
+        LOG_WARN("Cannot update statistics display: no model", "ResultsView");
         return;
     }
     
-    // Get statistics
+    if (!statisticsBuffer) {
+        LOG_ERR("Cannot update statistics display: no buffer", "ResultsView");
+        return;
+    }
+    
+    LOG_DEBUG("Updating statistics display for model: " + model->getName(), "ResultsView");
+    
+    std::stringstream ss;
+    
+    // Get statistics from the model
     auto statistics = model->getStatistics();
     
-    // Create a nicer representation of statistics with better names
-    std::unordered_map<std::string, double> formattedStats;
+    // Format the statistics with labels
+    ss << "Model Type: " << model->getName() << "\n\n";
     
-    // R-squared
-    auto r2 = statistics.find("r_squared");
-    if (r2 != statistics.end()) {
-        formattedStats["R² (coefficient of determination)"] = r2->second;
+    // Add metrics based on what's available
+    if (statistics.count("r_squared")) {
+        ss << "R² Score: " << std::fixed << std::setprecision(4) << statistics["r_squared"] << "\n";
     }
     
-    // Adjusted R-squared
-    auto adjR2 = statistics.find("adjusted_r_squared");
-    if (adjR2 != statistics.end()) {
-        formattedStats["Adjusted R²"] = adjR2->second;
+    if (statistics.count("adjusted_r_squared")) {
+        ss << "Adjusted R²: " << std::fixed << std::setprecision(4) << statistics["adjusted_r_squared"] << "\n";
     }
     
-    // RMSE
-    auto rmse = statistics.find("rmse");
-    if (rmse != statistics.end()) {
-        formattedStats["RMSE (root mean squared error)"] = rmse->second;
+    if (statistics.count("rmse")) {
+        ss << "Root Mean Squared Error (RMSE): " << std::fixed << std::setprecision(4) << statistics["rmse"] << "\n";
     }
     
-    // Number of samples
-    auto samples = statistics.find("n_samples");
-    if (samples != statistics.end()) {
-        formattedStats["Number of observations"] = samples->second;
+    if (statistics.count("mae")) {
+        ss << "Mean Absolute Error (MAE): " << std::fixed << std::setprecision(4) << statistics["mae"] << "\n";
     }
     
-    // Number of features
-    auto features = statistics.find("n_features");
-    if (features != statistics.end()) {
-        formattedStats["Number of variables"] = features->second;
+    if (statistics.count("n_samples")) {
+        ss << "Number of Samples: " << static_cast<int>(statistics["n_samples"]) << "\n";
     }
     
-    // Update table with formatted statistics
-    statisticsTable->setData(formattedStats);
+    if (statistics.count("n_features")) {
+        ss << "Number of Features: " << static_cast<int>(statistics["n_features"]) << "\n";
+    }
+    
+    // Set the text
+    statisticsBuffer->text(ss.str().c_str());
+    
+    LOG_DEBUG("Statistics display updated", "ResultsView");
 }
 
-std::string ResultsView::getEquationString() const {
+void ResultsView::updateParametersDisplay() {
     if (!model) {
-        return "No model available";
+        LOG_WARN("Cannot update parameters display: no model", "ResultsView");
+        return;
     }
     
-    std::ostringstream equation;
-    equation << std::fixed << std::setprecision(4);
-    
-    // Get target name
-    std::string targetName = model->getTargetName();
-    if (targetName.empty()) {
-        targetName = "Y";
+    if (!parametersBuffer) {
+        LOG_ERR("Cannot update parameters display: no buffer", "ResultsView");
+        return;
     }
     
-    // Get parameters
-    auto parameters = model->getParameters();
+    LOG_DEBUG("Updating parameters display for model: " + model->getName(), "ResultsView");
     
-    // Start with the target variable
-    equation << targetName << " = ";
+    std::stringstream ss;
     
-    // Add intercept
-    bool firstTerm = true;
-    auto interceptIt = parameters.find("intercept");
-    if (interceptIt != parameters.end()) {
-        equation << interceptIt->second;
-        firstTerm = false;
-    }
+    // Get parameters from the model
+    auto params = model->getParameters();
     
-    // Add coefficients with variable names
-    for (const auto& varName : model->getVariableNames()) {
-        auto coefIt = parameters.find(varName);
-        if (coefIt != parameters.end()) {
-            double coef = coefIt->second;
-            if (coef >= 0 && !firstTerm) {
-                equation << " + ";
-            } else if (coef < 0) {
-                equation << " - ";
-                coef = -coef; // Make positive for display
+    ss << "Model Parameters:\n\n";
+    
+    // Special handling for linear regression - using model's type name instead of enum value
+    if (model->getName() == "Linear Regression") {
+        // Check if we have an intercept in the parameters
+        double intercept = 0.0;
+        if (params.count("intercept")) {
+            intercept = params["intercept"];
+        }
+        
+        // Add intercept
+        ss << "Intercept: " << std::fixed << std::setprecision(4) << intercept << "\n\n";
+        
+        // Add coefficients
+        ss << "Coefficients:\n";
+        
+        // Get variable names from model
+        auto variableNames = model->getVariableNames();
+        
+        // Match variable names to parameter values
+        for (const auto& varName : variableNames) {
+            if (params.count(varName)) {
+                ss << varName << ": " << std::fixed << std::setprecision(4) << params[varName] << "\n";
             }
-            
-            equation << coef << " * " << varName;
-            firstTerm = false;
+        }
+    } else {
+        // For other model types, just show parameters in name:value format
+        for (const auto& param : params) {
+            ss << param.first << ": " << std::fixed << std::setprecision(4) << param.second << "\n";
         }
     }
     
-    return equation.str();
+    // Set the text
+    parametersBuffer->text(ss.str().c_str());
+    
+    LOG_DEBUG("Parameters display updated", "ResultsView");
 }
 
 void ResultsView::createPlots() {
-    if (!model || !dataFrame) {
-        return;
-    }
-
-    // Get actual and predicted values
-    Eigen::MatrixXd X = dataFrame->toMatrix(inputVariables);
-    Eigen::VectorXd y = Eigen::Map<Eigen::VectorXd>(
-        dataFrame->getColumn(targetVariable).data(),
-        dataFrame->getColumn(targetVariable).size()
-    );
-    Eigen::VectorXd predictions = model->predict(X);
-
-    // Convert Eigen vectors to std::vector
-    std::vector<double> actualValues(y.data(), y.data() + y.size());
-    std::vector<double> predictedValues(predictions.data(), predictions.data() + predictions.size());
-
-    // Clear existing plots
-    plotNavigator->clearPlots();
-
-    // Create standard plots for all models
-    plotNavigator->createPlot(
-        dataFrame, model,
-        "scatter", 
-        "Actual vs. Predicted Values"
-    );
-
-    plotNavigator->createPlot(
-        dataFrame, model,
-        "timeseries", 
-        "Time Series Plot"
-    );
-
-    plotNavigator->createPlot(
-        dataFrame, model,
-        "importance", 
-        "Feature Importance"
-    );
+    LOG_INFO("Creating plots for model: " + (model ? model->getName() : "null"), "ResultsView");
     
-    // Only create residual plot for non-linear regression models
-    if (model->getName() != "Linear Regression") {
-        plotNavigator->createPlot(
-            dataFrame, model,
-            "residual", 
-            "Residual Plot"
-        );
-    }
-
-    // Add model-specific plots
-    std::string modelName = model->getName();
-    
-    if (modelName == "Neural Network") {
-        // For neural networks, add architecture diagram
-        // We would need to extract layer sizes from the model
-        std::vector<int> layerSizes;
-        
-        // Check if we can get the layer sizes from hyperparameters
-        auto params = model->getParameters();
-        auto hiddenLayersIt = params.find("hidden_layer_sizes");
-        
-        if (hiddenLayersIt != params.end()) {
-            // Parse the hidden layer sizes
-            std::string hiddenLayers = std::to_string(hiddenLayersIt->second);
-            std::stringstream ss(hiddenLayers);
-            std::string layer;
-            
-            // Add input layer size (number of features)
-            layerSizes.push_back(inputVariables.size());
-            
-            // Parse comma-separated hidden layer sizes
-            while (std::getline(ss, layer, ',')) {
-                try {
-                    layerSizes.push_back(std::stoi(layer));
-                } catch (...) {
-                    // If we can't parse, just use a default
-                    layerSizes.push_back(10);
-                }
-            }
-            
-            // Add output layer (always 1 for regression)
-            layerSizes.push_back(1);
-            
-            plotNavigator->createPlot(
-                dataFrame, model,
-                "neural_network_architecture", 
-                "Neural Network Architecture"
-            );
-        }
-    }
-    else if (modelName == "Random Forest" || modelName == "Gradient Boosting" || modelName == "XGBoost") {
-        // For tree-based models, add a tree visualization (if available)
-        plotNavigator->createPlot(
-            dataFrame, model,
-            "tree_visualization", 
-            "Tree Visualization"
-        );
-    }
-    
-    // For all models except Linear Regression, add learning curves
-    if (modelName != "Linear Regression") {
-        plotNavigator->createPlot(
-            dataFrame, model,
-            "learning_curve", 
-            "Learning Curves"
-        );
-    }
-}
-
-void ResultsView::exportResults(const ExportDialog::ExportOptions& options) {
-    if (!model || !dataFrame) {
+    if (!model) {
+        LOG_ERR("No model available for plotting", "ResultsView");
         return;
     }
     
-    // For now, use the original export options until the new fields are properly implemented
-    std::string exportPath = options.exportPath;
-    bool exportSummary = options.modelSummary;
-    bool exportCSV = options.predictedValues;
-    bool exportPlots = options.scatterPlot || options.linePlot || options.importancePlot;
+    if (!plottingInitialized) {
+        LOG_ERR("PlottingUtility not initialized", "ResultsView");
+        return;
+    }
     
-    // Original export code
+    // Get model data for plotting
+    LOG_DEBUG("Getting model data for plots", "ResultsView");
+    
     try {
-        // Export model summary if selected
-        if (exportSummary) {
-            std::string summaryPath = exportPath + "/model_summary.txt";
-            std::ofstream file(summaryPath);
-            if (file.is_open()) {
-                file << "Model Summary\n";
-                file << "============\n\n";
-                file << "Model Type: " << model->getName() << "\n\n";
-                
-                file << "Parameters:\n";
-                for (const auto& param : model->getParameters()) {
-                    file << "  " << param.first << ": " << param.second << "\n";
+        // Get actual and predicted values
+        auto statistics = model->getStatistics();
+        auto parameters = model->getParameters();
+        
+        // Need to get the data differently for each model
+        if (!dataFrame) {
+            LOG_ERR("No DataFrame available for plotting", "ResultsView");
+            return;
+        }
+        
+        // Get target values (actual)
+        std::vector<double> actual;
+        std::string targetColumn = model->getTargetName();
+        
+        if (dataFrame->hasColumn(targetColumn)) {
+            actual = dataFrame->getColumn(targetColumn);
+            LOG_DEBUG("Retrieved " + std::to_string(actual.size()) + " actual values", "ResultsView");
+        } else {
+            LOG_ERR("Target column not found in DataFrame", "ResultsView");
+            return;
+        }
+        
+        // Get predictions by letting the model predict on its training data
+        auto featureNames = model->getVariableNames();
+        Eigen::MatrixXd X = dataFrame->toMatrix(featureNames);
+        Eigen::VectorXd predictions = model->predict(X);
+        
+        std::vector<double> predicted(predictions.data(), predictions.data() + predictions.size());
+        LOG_DEBUG("Retrieved " + std::to_string(predicted.size()) + " predicted values", "ResultsView");
+        
+        if (actual.empty() || predicted.empty()) {
+            LOG_ERR("Empty actual or predicted values", "ResultsView");
+            return;
+        }
+        
+        // Ensure equal sizes (in case of any mismatch)
+        size_t minSize = std::min(actual.size(), predicted.size());
+        if (actual.size() != predicted.size()) {
+            LOG_WARN("Size mismatch between actual and predicted values, truncating to " + 
+                    std::to_string(minSize), "ResultsView");
+            actual.resize(minSize);
+            predicted.resize(minSize);
+        }
+        
+        // Create scatter plot for actual vs predicted
+        LOG_INFO("Creating scatter plot", "ResultsView");
+        try {
+            PlottingUtility::getInstance().createScatterPlot(
+                actual, 
+                predicted,
+                "Actual vs Predicted Values",
+                "Actual", 
+                "Predicted"
+            );
+            LOG_INFO("Rendering scatter plot", "ResultsView");
+            PlottingUtility::getInstance().render();
+        } catch (const std::exception& e) {
+            LOG_ERR("Failed to create or render scatter plot: " + std::string(e.what()), "ResultsView");
+        } catch (...) {
+            LOG_ERR("Unknown error creating or rendering scatter plot", "ResultsView");
+        }
+        
+        // Only create time series plot if we have enough data points
+        if (actual.size() > 2) {
+            LOG_INFO("Creating time series plot", "ResultsView");
+            try {
+                PlottingUtility::getInstance().createTimeSeriesPlot(
+                    actual,
+                    predicted,
+                    "Actual vs Predicted Over Time"
+                );
+                LOG_INFO("Rendering time series plot", "ResultsView");
+                PlottingUtility::getInstance().render();
+            } catch (const std::exception& e) {
+                LOG_ERR("Failed to create or render time series plot: " + std::string(e.what()), "ResultsView");
+            } catch (...) {
+                LOG_ERR("Unknown error creating or rendering time series plot", "ResultsView");
+            }
+        } else {
+            LOG_WARN("Not enough data points for time series plot", "ResultsView");
+        }
+        
+        // Calculate residuals
+        LOG_DEBUG("Calculating residuals", "ResultsView");
+        std::vector<double> residuals;
+        for (size_t i = 0; i < actual.size() && i < predicted.size(); ++i) {
+            residuals.push_back(actual[i] - predicted[i]);
+        }
+        
+        if (!residuals.empty()) {
+            LOG_INFO("Creating residual plot", "ResultsView");
+            try {
+                PlottingUtility::getInstance().createResidualPlot(
+                    predicted,
+                    residuals,
+                    "Residual Plot"
+                );
+                LOG_INFO("Rendering residual plot", "ResultsView");
+                PlottingUtility::getInstance().render();
+            } catch (const std::exception& e) {
+                LOG_ERR("Failed to create or render residual plot: " + std::string(e.what()), "ResultsView");
+            } catch (...) {
+                LOG_ERR("Unknown error creating or rendering residual plot", "ResultsView");
+            }
+        } else {
+            LOG_WARN("No residuals available for plotting", "ResultsView");
+        }
+        
+        // Create feature importance plot if supported
+        if (model->supportsFeatureImportance()) {
+            try {
+                auto importance = model->getFeatureImportance();
+                if (!importance.empty()) {
+                    LOG_INFO("Creating feature importance plot", "ResultsView");
+                    PlottingUtility::getInstance().createImportancePlot(
+                        importance,
+                        "Feature Importance"
+                    );
+                    LOG_INFO("Rendering feature importance plot", "ResultsView");
+                    PlottingUtility::getInstance().render();
                 }
-                file << "\n";
-                
-                file << "Statistics:\n";
-                for (const auto& stat : model->getStatistics()) {
-                    file << "  " << stat.first << ": " << stat.second << "\n";
-                }
-                file << "\n";
-                
-                file << "Input Variables:\n";
-                for (const auto& var : inputVariables) {
-                    file << "  " << var << "\n";
-                }
-                file << "\n";
-                
-                file << "Target Variable: " << targetVariable << "\n";
-                file.close();
-                
-                fl_message("Model summary exported to %s", summaryPath.c_str());
-            } else {
-                fl_alert("Error: Failed to open file for writing: %s", summaryPath.c_str());
+            } catch (const std::exception& e) {
+                LOG_ERR("Failed to create feature importance plot: " + std::string(e.what()), "ResultsView");
+            } catch (...) {
+                LOG_ERR("Unknown error creating feature importance plot", "ResultsView");
             }
         }
         
-        if (exportCSV) {
-            // Generate CSV with predictions
-            std::string csvPath = exportPath + "/predictions.csv";
-            std::ofstream file(csvPath);
-            if (file.is_open()) {
-                // Write header
-                file << targetVariable << ",Predicted\n";
-                
-                // Generate predictions
-                Eigen::MatrixXd X = dataFrame->toMatrix(inputVariables);
-                Eigen::VectorXd predictions = model->predict(X);
-                std::vector<double> targetData = dataFrame->getColumn(targetVariable);
-                
-                // Write data
-                for (int i = 0; i < predictions.size(); ++i) {
-                    file << targetData[i] << "," << predictions(i) << "\n";
-                }
-                
-                file.close();
-                fl_message("Predictions exported to %s", csvPath.c_str());
-            } else {
-                fl_alert("Error: Failed to open file for writing: %s", csvPath.c_str());
-            }
-        }
-        
-        if (exportPlots) {
-            // Export all plots
-            for (size_t i = 0; i < plotNavigator->getPlotCount(); ++i) {
-                std::string plotPath = exportPath + "/plot_" + std::to_string(i+1) + ".png";
-                if (!plotNavigator->savePlotToFile(i, plotPath)) {
-                    fl_alert("Error: Failed to save plot to %s", plotPath.c_str());
-                }
-            }
-            fl_message("Plots exported to %s", exportPath.c_str());
-        }
-    }
-    catch (const std::exception& e) {
-        fl_alert("Error exporting results: %s", e.what());
+        LOG_INFO("All plots created successfully", "ResultsView");
+    } catch (const std::exception& e) {
+        LOG_ERR("Exception in createPlots: " + std::string(e.what()), "ResultsView");
+        throw; // Rethrow to allow calling function to handle
+    } catch (...) {
+        LOG_ERR("Unknown exception in createPlots", "ResultsView");
+        throw; // Rethrow to allow calling function to handle
     }
 }
 
-// Model-specific display methods
-void ResultsView::updateLinearRegressionDisplay() {
-    // Update parameters and statistics displays
-    updateParametersDisplay();
-    updateStatisticsDisplay();
-    
-    // Create specific plots for linear regression
-    createPlots();
-    
-    // Additional model-specific displays
-    if (model && equationDisplay) {  // Add null check for equationDisplay
-        // Add equation display
-        std::string equation = getEquationString();
-        equationDisplay->copy_label(equation.c_str());
+void ResultsView::exportResults() {
+    LOG_INFO("Exporting results", "ResultsView");
+    // Implementation for exporting results can be added here
+    // For now, just show a message
+    fl_message("Export functionality not implemented yet");
+}
+
+void ResultsView::exportButtonCallback(Fl_Widget* w, void* data) {
+    ResultsView* view = static_cast<ResultsView*>(data);
+    if (view) {
+        LOG_INFO("Export button clicked", "ResultsView");
+        view->exportResults();
     }
-}
-
-void ResultsView::updateElasticNetDisplay() {
-    // Update parameters and statistics displays
-    updateParametersDisplay();
-    updateStatisticsDisplay();
-    
-    // Create common plots
-    createPlots();
-    
-    // Add specific plots for ElasticNet
-    if (model && dataFrame) {
-        // Add regularization path plot if available
-        // For now, use standard plots
-    }
-}
-
-void ResultsView::updateRandomForestDisplay() {
-    // Update parameters and statistics displays
-    updateParametersDisplay();
-    updateStatisticsDisplay();
-    
-    // Create standard plots
-    createPlots();
-    
-    // Add specific visualizations for Random Forest
-    if (model && dataFrame) {
-        // Add feature importance plot
-        auto importance = model->getFeatureImportance();
-        plotNavigator->createPlot(dataFrame, model, "importance", "Feature Importance");
-    }
-}
-
-void ResultsView::updateXGBoostDisplay() {
-    // Update parameters and statistics displays
-    updateParametersDisplay();
-    updateStatisticsDisplay();
-    
-    // Create standard plots
-    createPlots();
-    
-    // Add specific visualizations for XGBoost
-    if (model && dataFrame) {
-        // Add feature importance plot
-        auto importance = model->getFeatureImportance();
-        plotNavigator->createPlot(dataFrame, model, "importance", "Feature Importance");
-    }
-}
-
-void ResultsView::updateGradientBoostingDisplay() {
-    // Update parameters and statistics displays
-    updateParametersDisplay();
-    updateStatisticsDisplay();
-    
-    // Create standard plots
-    createPlots();
-    
-    // Add specific visualizations for Gradient Boosting
-    if (model && dataFrame) {
-        // Add feature importance plot
-        auto importance = model->getFeatureImportance();
-        plotNavigator->createPlot(dataFrame, model, "importance", "Feature Importance");
-    }
-}
-
-void ResultsView::updateNeuralNetworkDisplay() {
-    // Update parameters and statistics displays
-    updateParametersDisplay();
-    updateStatisticsDisplay();
-    
-    // Create standard plots
-    createPlots();
-    
-    // Add specific visualizations for Neural Network
-    if (model && dataFrame) {
-        // Add neural network architecture visualization if available
-        if (hyperparameters.count("hiddenLayerSizes")) {
-            std::string hiddenLayers = hyperparameters.at("hiddenLayerSizes");
-            std::vector<int> layerSizes;
-            
-            // Parse hidden layer sizes
-            std::stringstream ss(hiddenLayers);
-            std::string item;
-            while (std::getline(ss, item, ',')) {
-                try {
-                    layerSizes.push_back(std::stoi(item));
-                } catch (...) {
-                    // Skip invalid values
-                }
-            }
-            
-            // Add input and output layer sizes
-            layerSizes.insert(layerSizes.begin(), inputVariables.size());
-            layerSizes.push_back(1); // Regression has 1 output
-            
-            // Create architecture plot
-            plotNavigator->createPlot(dataFrame, model, "nn_architecture", "Neural Network Architecture");
-        }
-    }
-}
-
-// Export methods for different model types
-void ResultsView::exportLinearRegressionResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
-void ResultsView::exportElasticNetResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
-void ResultsView::exportRandomForestResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
-void ResultsView::exportXGBoostResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
-void ResultsView::exportGradientBoostingResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
-void ResultsView::exportNeuralNetworkResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
-void ResultsView::setBackButtonCallback(std::function<void()> callback) {
-    backButtonCallback = callback;
-}
-
-void ResultsView::backButtonCallback_static(Fl_Widget* widget, void* userData) {
-    ResultsView* self = static_cast<ResultsView*>(userData);
-    self->handleBackButton();
-}
-
-void ResultsView::exportButtonCallback_static(Fl_Widget* widget, void* userData) {
-    ResultsView* self = static_cast<ResultsView*>(userData);
-    self->handleExportButton();
-}
-
-void ResultsView::handleBackButton() {
-    if (backButtonCallback) {
-        backButtonCallback();
-    }
-}
-
-void ResultsView::handleExportButton() {
-    if (!model || !dataFrame) {
-        fl_alert("No model or data available to export!");
-        return;
-    }
-
-    exportDialog->setModel(model);
-    exportDialog->show();
 }

@@ -1,45 +1,85 @@
 #pragma once
 
-#include <FL/Fl_Group.H>
-#include <FL/Fl_Button.H>
-#include <FL/Fl_Box.H>
 #include <vector>
 #include <string>
 #include <memory>
+#include <unordered_map>
+#include "imgui.h"
 #include "gui/PlotWidget.h"
-#include "data/DataFrame.h"
-#include "models/Model.h"
 
 /**
- * @brief Class for managing multiple plots with navigation
+ * @brief Class for managing multiple plots with navigation (ImGui version)
  */
-class PlotNavigator : public Fl_Group {
+class PlotNavigator {
 public:
-    PlotNavigator(int x, int y, int w, int h);
+    /**
+     * @brief Constructor
+     */
+    PlotNavigator();
+    
+    /**
+     * @brief Destructor
+     */
     ~PlotNavigator();
 
     /**
-     * @brief Create a new plot
+     * @brief Create a scatter, time series, or residual plot
      * 
-     * @param data DataFrame containing the data
-     * @param model Model used for predictions
      * @param plotType Type of plot to create
      * @param title Plot title
+     * @param xValues X values for the plot
+     * @param yValues Y values for the plot
      */
-    void createPlot(const std::shared_ptr<DataFrame>& data,
-                   const std::shared_ptr<Model>& model,
-                   const std::string& plotType,
-                   const std::string& title);
+    void createPlot(PlotWidget::PlotType plotType, const std::string& title,
+                  const std::vector<double>& xValues, 
+                  const std::vector<double>& yValues);
+    
+    /**
+     * @brief Create a feature importance plot
+     * 
+     * @param plotType Should be PlotType::IMPORTANCE
+     * @param title Plot title
+     * @param values Map of feature names to importance values
+     */
+    void createPlot(PlotWidget::PlotType plotType, const std::string& title,
+                  const std::unordered_map<std::string, double>& values);
+    
+    /**
+     * @brief Create a learning curve or loss curve plot
+     * 
+     * @param plotType Plot type (LEARNING_CURVE or LOSS_CURVE)
+     * @param title Plot title
+     * @param xValues X values (training sizes or epochs)
+     * @param yValues First Y series (training scores/loss)
+     * @param y2Values Second Y series (validation scores/loss)
+     */
+    void createPlot(PlotWidget::PlotType plotType, const std::string& title,
+                  const std::vector<double>& xValues, 
+                  const std::vector<double>& yValues,
+                  const std::vector<double>& y2Values);
+
+    /**
+     * @brief Show a specific plot by index
+     * 
+     * @param index Index of the plot to show
+     */
+    void showPlot(size_t index);
 
     /**
      * @brief Navigate to the next plot
+     * 
+     * @return true If navigation was successful
+     * @return false If at the last plot already
      */
-    void nextPlot();
+    bool nextPlot();
 
     /**
      * @brief Navigate to the previous plot
+     * 
+     * @return true If navigation was successful
+     * @return false If at the first plot already
      */
-    void prevPlot();
+    bool previousPlot();
 
     /**
      * @brief Clear all plots
@@ -60,18 +100,20 @@ public:
      * 
      * @return size_t Number of plots
      */
-    size_t getPlotCount() const { return plots.size(); }
+    size_t getPlotCount() const;
+    
+    /**
+     * @brief Render the current plot using ImGui
+     */
+    void render();
 
 private:
-    std::vector<PlotWidget*> plots;
+    std::vector<std::unique_ptr<PlotWidget>> plots;
     size_t currentPlotIndex;
-    Fl_Button* prevButton;
-    Fl_Button* nextButton;
-    Fl_Box* plotLabel;
-
-    static void prevButtonCallback(Fl_Widget* w, void* v);
-    static void nextButtonCallback(Fl_Widget* w, void* v);
-
-    void updateVisibility();
-    void updateNavigationButtons();
+    size_t numPlots;
+    
+    /**
+     * @brief Update the plot count after adding or removing plots
+     */
+    void updatePlotCount();
 }; 

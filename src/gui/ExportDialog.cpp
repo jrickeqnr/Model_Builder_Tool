@@ -4,13 +4,23 @@
 #include <sstream>
 #include <iomanip>
 
+ExportDialog::ExportDialog()
+    : Fl_Window(400, 300, "Export Options")
+{
+    initialize();
+}
+
 ExportDialog::ExportDialog(int w, int h, const char* title)
     : Fl_Window(w, h, title)
 {
+    initialize();
+}
+
+void ExportDialog::initialize() {
     begin();
 
     int padding = 10;
-    int checkboxWidth = w - 2 * padding;
+    int checkboxWidth = w() - 2 * padding;
     int checkboxHeight = 25;
     int y = padding;
 
@@ -36,26 +46,30 @@ ExportDialog::ExportDialog(int w, int h, const char* title)
     y += checkboxHeight + padding;
 
     // Create path selection components
-    pathDisplay = new Fl_Box(padding, y, w - 3 * padding - 80, checkboxHeight, "No directory selected");
+    pathDisplay = new Fl_Box(padding, y, w() - 3 * padding - 80, checkboxHeight, "No directory selected");
     pathDisplay->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
     pathDisplay->box(FL_DOWN_BOX);
 
-    browseButton = new Fl_Button(w - padding - 80, y, 80, checkboxHeight, "Browse");
+    browseButton = new Fl_Button(w() - padding - 80, y, 80, checkboxHeight, "Browse");
     browseButton->callback(browseCallback, this);
     y += checkboxHeight + padding;
 
     // Create action buttons
     int buttonWidth = 80;
-    int buttonSpacing = (w - 2 * padding - 2 * buttonWidth) / 3;
+    int buttonSpacing = (w() - 2 * padding - 2 * buttonWidth) / 3;
     
     exportButton = new Fl_Button(padding + buttonSpacing, y, buttonWidth, checkboxHeight, "Export");
     exportButton->callback(exportCallback, this);
-    exportButton->deactivate(); // Disabled until directory is selected
-
-    cancelButton = new Fl_Button(padding + buttonWidth + 2 * buttonSpacing, y, buttonWidth, checkboxHeight, "Cancel");
+    
+    cancelButton = new Fl_Button(padding + buttonSpacing * 2 + buttonWidth, y, buttonWidth, checkboxHeight, "Cancel");
     cancelButton->callback(cancelCallback, this);
-
+    
     end();
+    
+    // Set window properties
+    set_modal();
+    set_non_modal();
+    hide();
 }
 
 ExportDialog::~ExportDialog() {

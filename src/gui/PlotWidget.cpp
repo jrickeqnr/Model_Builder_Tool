@@ -1,21 +1,15 @@
 #include "gui/PlotWidget.h"
 #include "utils/Logger.h"
-#include <FL/Fl.H>
-#include <FL/fl_draw.H>
-#include <FL/fl_ask.H>
-#include <FL/Fl_PNG_Image.H>
-#include <fstream>
-#include <iomanip>
-#include <cstdio>
-#include <cstdlib>
-#include <array>
-#include <sstream>
-#include <chrono>
-#include <ctime>
+#include "utils/PlottingUtility.h"
+#include <algorithm>
+#include <string>
 #include <filesystem>
-#include <windows.h>
-#include <algorithm>  // For std::min
-#include <memory>    // For std::unique_ptr
+#include <iostream>
+#include <memory>
+#include <sstream>
+
+#include "imgui.h"
+#include "implot.h"
 
 // Define the LOG_INFO macro if it's not available
 #ifndef LOG_INFO
@@ -26,1158 +20,517 @@
 #define LOG_ERR(message, component) std::cerr << "[ERROR][" << component << "] " << message << std::endl
 #endif
 
-// Helper function to properly format file paths for Python scripts
-std::string formatPathForPython(const std::string& path) {
-    std::string result = path;
-    // Replace backslashes with forward slashes, which Python accepts even on Windows
-    std::replace(result.begin(), result.end(), '\\', '/');
-    return result;
-}
-
-// Define the static constant
-const double PlotWidget::RESIZE_DELAY = 0.5;  // Delay in seconds before regenerating plot after resize
+#ifndef LOG_WARNING
+#define LOG_WARNING(message, component) std::cerr << "[WARNING][" << component << "] " << message << std::endl
+#endif
 
 // PlotWidget implementation
-PlotWidget::PlotWidget(int x, int y, int w, int h)
-    : Fl_Group(x, y, w, h), plotImageData(nullptr), plotImageWidth(0), plotImageHeight(0),
-      currentPlotType(PlotType::None), resizeTimerActive(false), pendingWidth(0), pendingHeight(0)
-{
-    box(FL_DOWN_BOX);
-    color(FL_WHITE);
-    
-    // Create a box to display the plot image
-    plotBox = new Fl_Box(x, y, w, h);
-    plotBox->box(FL_FLAT_BOX);
-    
-    end();
+PlotWidget::PlotWidget()
+    : title("Plot"), xLabel("X"), yLabel("Y"), plotType(PlotType::NONE) {
+    LOG_DEBUG("PlotWidget constructor called", "PlotWidget");
 }
 
 PlotWidget::~PlotWidget() {
-    if (plotImageData) {
-        delete[] plotImageData;
-    }
-}
-
-void PlotWidget::draw() {
-    Fl_Group::draw();
-    
-    if (plotImageData) {
-        // Draw plot image
-        fl_draw_image((const uchar*)plotImageData, x(), y(), plotImageWidth, plotImageHeight, 3, 0);
-    } else {
-        // Draw message when no plot is available
-        fl_color(FL_BLACK);
-        fl_font(FL_HELVETICA, 14);
-        fl_draw("No plot available", x(), y(), w(), h(), FL_ALIGN_CENTER);
-    }
-}
-
-void PlotWidget::resizeTimeoutCallback(void* v) {
-    PlotWidget* widget = static_cast<PlotWidget*>(v);
-    widget->resizeTimerActive = false;
-    
-    // Call base class resize first
-    widget->Fl_Group::resize(widget->x(), widget->y(), widget->pendingWidth, widget->pendingHeight);
-    
-    // Resize the plot box
-    widget->plotBox->resize(widget->x(), widget->y(), widget->pendingWidth, widget->pendingHeight);
-    
-    // Regenerate the plot with new dimensions if we have data
-    if (widget->currentPlotType != PlotType::None) {
-        widget->regeneratePlot();
-    }
-}
-
-void PlotWidget::resize(int x, int y, int w, int h) {
-    // Store the pending dimensions
-    pendingWidth = w;
-    pendingHeight = h;
-    
-    // If a timer is already active, remove it
-    if (resizeTimerActive) {
-        Fl::remove_timeout(resizeTimeoutCallback, this);
-    }
-    
-    // Set a new timer
-    resizeTimerActive = true;
-    Fl::add_timeout(RESIZE_DELAY, resizeTimeoutCallback, this);
-    
-    // Immediately resize the widget without regenerating the plot
-    Fl_Group::resize(x, y, w, h);
-    plotBox->resize(x, y, w, h);
-    redraw();
+    LOG_DEBUG("PlotWidget destructor called", "PlotWidget");
+    // Nothing to clean up
 }
 
 void PlotWidget::regeneratePlot() {
-    switch (currentPlotType) {
-        case PlotType::Scatter:
-            createScatterPlot(storedActualValues, storedPredictedValues, 
-                            storedXLabel, storedYLabel, storedTitle,
-                            "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
-            break;
-        case PlotType::Timeseries:
-            createTimeseriesPlot(storedActualValues, storedPredictedValues, storedTitle,
-                                "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
-            break;
-        case PlotType::Importance:
-            createImportancePlot(storedImportance, storedTitle, 
-                                "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
-            break;
-        case PlotType::Residual:
-            createResidualPlot(storedActualValues, storedPredictedValues, storedTitle,
-                              "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
-            break;
-        case PlotType::LearningCurve:
-            createLearningCurvePlot(storedTrainingScores, storedValidationScores, storedTrainingSizes, storedTitle,
-                                   "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
-            break;
-        case PlotType::NeuralNetworkArchitecture:
-            createNeuralNetworkArchitecturePlot(storedLayerSizes, storedTitle,
-                                              "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
-            break;
-        case PlotType::TreeVisualization:
-            createTreeVisualizationPlot(storedTreeStructure, storedTitle,
-                                       "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
-            break;
-        case PlotType::None:
-            break;
-    }
+    // Nothing to do here, as rendering is done on-demand in the render() method
+    LOG_INFO("Plot regeneration requested for plot: " + title, "PlotWidget");
 }
 
-bool PlotWidget::createTempDataFile(const std::string& data, const std::string& filename)
-{
-    try {
-        // Get Windows temp directory
-        char tempPath[MAX_PATH];
-        if (GetTempPathA(MAX_PATH, tempPath) == 0) {
-            LOG_ERR("Failed to get temp directory", "PlotWidget");
-            return false;
-        }
-
-        // Create a unique filename using the process ID and timestamp
-        std::string uniqueFilename = std::to_string(GetCurrentProcessId()) + "_" + 
-                                   std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + 
-                                   "_" + std::filesystem::path(filename).filename().string();
-
-        std::filesystem::path fullPath = std::filesystem::path(tempPath) / uniqueFilename;
-        
-        std::ofstream file(fullPath);
-        if (!file.is_open()) {
-            LOG_ERR("ERROR: Failed to create temporary file: " + fullPath.string(), "PlotWidget");
-            return false;
-        }
-        
-        file << data;
-        file.close();
-        
-        // Store the full path for later use
-        tempFilePaths[filename] = fullPath.string();
-        return true;
-    }
-    catch (const std::exception& e) {
-        LOG_ERR("ERROR: Exception while creating temporary file: " + std::string(e.what()), "PlotWidget");
-        return false;
-    }
-}
-
-bool PlotWidget::executePythonScript(const std::string& scriptPath, const std::string& tempDataPath, const std::string& tempImagePath)
-{
-    try {
-        // Check if Python is available
-        int pythonCheck = system("python --version > nul 2>&1");
-        if (pythonCheck != 0) {
-            LOG_ERR("ERROR: Python is not available", "PlotWidget");
-            fl_alert("Python is not available. Please install Python and required libraries (matplotlib, pandas, numpy).");
-            return false;
-        }
-
-        // Execute the Python script with proper path handling
-        std::string command = "python \"" + formatPathForPython(std::filesystem::path(scriptPath).string()) + "\" 2>&1";
-        FILE* pipe = _popen(command.c_str(), "r");
-        if (!pipe) {
-            LOG_ERR("ERROR: Failed to execute Python script", "PlotWidget");
-            return false;
-        }
-
-        // Read and log the output
-        char buffer[128];
-        std::string result = "";
-        while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-            result += buffer;
-        }
-        LOG_INFO("Python script output:\n" + result, "PlotWidget");
-
-        // Close the pipe
-        int status = _pclose(pipe);
-        if (status != 0) {
-            LOG_ERR("ERROR: Python script failed with status " + std::to_string(status), "PlotWidget");
-            fl_alert("Failed to generate plot. Check if Python and required libraries are installed.");
-            return false;
-        }
-
-        // Check if the output file was created
-        if (!std::filesystem::exists(tempImagePath)) {
-            LOG_ERR("ERROR: Plot image file was not created: " + tempImagePath, "PlotWidget");
-            return false;
-        }
-
-        return true;
-    }
-    catch (const std::exception& e) {
-        LOG_ERR("ERROR: Exception while executing Python script: " + std::string(e.what()), "PlotWidget");
-        return false;
-    }
-}
-
-// Helper function to format paths for use with Python
-std::string PlotWidget::formatPathForPython(const std::string& path) {
-    std::string result = path;
-    std::replace(result.begin(), result.end(), '\\', '/');
-    return result;
-}
-
-void PlotWidget::createTempFilePaths(const std::string& baseName,
-                           std::string& dataPath,
-                           std::string& imagePath, 
-                           std::string& scriptPath) {
-    // Generate unique names
-    std::string uniqueId = std::to_string(reinterpret_cast<uintptr_t>(this)) + "_" + 
-                         std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-                         
-    // Set output parameter file names
-    dataPath = "temp_" + baseName + "_data_" + uniqueId + ".csv";
-    imagePath = "temp_" + baseName + "_image_" + uniqueId + ".png";
-    scriptPath = "temp_" + baseName + "_script_" + uniqueId + ".py";
+void PlotWidget::createScatterPlot(
+    const std::vector<double>& xValues,
+    const std::vector<double>& yValues,
+    const std::string& xLabel,
+    const std::string& yLabel
+) {
+    LOG_DEBUG("Creating scatter plot with " + std::to_string(xValues.size()) + " points", "PlotWidget");
     
-    // Register the files in the temp directory
-    createTempDataFile("", dataPath);
-    createTempDataFile("", imagePath);
-    createTempDataFile("", scriptPath);
-    
-    // Return the full paths via output parameters
-    dataPath = tempFilePaths[dataPath];
-    imagePath = tempFilePaths[imagePath];
-    scriptPath = tempFilePaths[scriptPath];
-}
-
-void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
-                                 const std::vector<double>& predictedValues,
-                                 const std::string& xLabel,
-                                 const std::string& yLabel,
-                                 const std::string& title,
-                                 const std::string& tempDataPath,
-                                 const std::string& tempImagePath,
-                                 const std::string& tempScriptPath)
-{
-    // Store data for regeneration
-    currentPlotType = PlotType::Scatter;
-    storedActualValues = actualValues;
-    storedPredictedValues = predictedValues;
-    storedXLabel = xLabel;
-    storedYLabel = yLabel;
-    storedTitle = title;
-
-    try {
-        // Get Windows temp directory
-        char tempPath[MAX_PATH];
-        if (GetTempPathA(MAX_PATH, tempPath) == 0) {
-            LOG_ERR("Failed to get temp directory", "PlotWidget");
-            return;
-        }
-
-        // Create a unique subdirectory for temporary files
-        std::string uniqueDir = std::to_string(GetCurrentProcessId()) + "_" + 
-                               std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-        std::filesystem::path tempDir = std::filesystem::path(tempPath) / "Model_Builder_Tool" / uniqueDir;
-        std::filesystem::create_directories(tempDir);
-        
-        // Create paths for temporary files
-        std::filesystem::path dataFile = tempDir / "scatter_data.csv";
-        std::filesystem::path modelFile = tempDir / "scatter_model.csv";
-        std::filesystem::path outputFile = tempDir / "scatter_plot.png";
-        
-        // Create original data CSV file
-        std::ofstream dataFileStream(dataFile);
-        if (!dataFileStream.is_open()) {
-            LOG_ERR("Failed to create data file", "PlotWidget");
-            return;
-        }
-        
-        dataFileStream << "index," << yLabel << "\n";
-        size_t minSize = actualValues.size() < predictedValues.size() ? actualValues.size() : predictedValues.size();
-        for (size_t i = 0; i < minSize; ++i) {
-            dataFileStream << i << "," << actualValues[i] << "\n";
-        }
-        dataFileStream.close();
-        
-        // Create model data CSV file
-        std::ofstream modelFileStream(modelFile);
-        if (!modelFileStream.is_open()) {
-            LOG_ERR("Failed to create model file", "PlotWidget");
-            return;
-        }
-        
-        modelFileStream << "predicted\n";
-        for (size_t i = 0; i < minSize; ++i) {
-            modelFileStream << predictedValues[i] << "\n";
-        }
-        modelFileStream.close();
-        
-        // Get the path to the plotting script
-        std::filesystem::path scriptPath = PlottingUtility::getPlottingScriptPath();
-        if (scriptPath.empty()) {
-            LOG_ERR("Could not find plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Build the command to run the Python script
-        std::stringstream cmd;
-        cmd << "python \"" << formatPathForPython(scriptPath.string()) << "\"";
-        cmd << " --plot_type scatter";
-        cmd << " --data_file \"" << formatPathForPython(dataFile.string()) << "\"";
-        cmd << " --model_file \"" << formatPathForPython(modelFile.string()) << "\"";
-        cmd << " --output_file \"" << formatPathForPython(outputFile.string()) << "\"";
-        cmd << " --x_column \"" << xLabel << "\"";
-        cmd << " --y_column \"" << yLabel << "\"";
-        cmd << " --title \"" << title << "\"";
-        cmd << " --width " << (plotBox->w() / 100.0);
-        cmd << " --height " << (plotBox->h() / 100.0);
-        
-        // Store path for later use (needed for saving plots)
-        tempFilePaths[tempDataPath] = dataFile.string();
-        tempFilePaths[tempImagePath] = outputFile.string();
-        
-        // Run the command
-        int result = std::system(cmd.str().c_str());
-        if (result != 0) {
-            LOG_ERR("Failed to run plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Load the generated image
-        Fl_PNG_Image* pngImage = new Fl_PNG_Image(outputFile.string().c_str());
-        if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-            // Store the image dimensions
-            plotImageWidth = pngImage->w();
-            plotImageHeight = pngImage->h();
-
-            // Create a new buffer for the image data
-            if (plotImageData) {
-                delete[] plotImageData;
-            }
-            plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
-
-            // Copy the image data
-            const char* imageData = (const char*)pngImage->data()[0];
-            int depth = pngImage->d();
-
-            for (int y = 0; y < plotImageHeight; y++) {
-                for (int x = 0; x < plotImageWidth; x++) {
-                    int srcIdx = (y * plotImageWidth + x) * depth;
-                    int dstIdx = (y * plotImageWidth + x) * 3;
-
-                    if (depth >= 3) {
-                        // RGB data
-                        plotImageData[dstIdx] = imageData[srcIdx];     // R
-                        plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
-                        plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
-                    } else if (depth == 1) {
-                        // Grayscale
-                        plotImageData[dstIdx] = 
-                        plotImageData[dstIdx+1] = 
-                        plotImageData[dstIdx+2] = imageData[srcIdx];
-                    }
-                }
-            }
-            
-            delete pngImage;
-            redraw();
-        }
-        
-        // Clean up temporary files (optional - can keep them for debugging)
-        // std::filesystem::remove_all(tempDir);
-    }
-    catch (const std::exception& e) {
-        LOG_ERR("Error creating scatter plot: " + std::string(e.what()), "PlotWidget");
-    }
-}
-
-void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
-                                    const std::vector<double>& predictedValues,
-                                    const std::string& title,
-                                    const std::string& tempDataPath,
-                                    const std::string& tempImagePath,
-                                    const std::string& tempScriptPath) {
-    // Store data for regeneration
-    currentPlotType = PlotType::Timeseries;
-    storedActualValues = actualValues;
-    storedPredictedValues = predictedValues;
-    storedTitle = title;
-
-    try {
-        // Get Windows temp directory
-        char tempPath[MAX_PATH];
-        if (GetTempPathA(MAX_PATH, tempPath) == 0) {
-            LOG_ERR("Failed to get temp directory", "PlotWidget");
-            return;
-        }
-
-        // Create a unique subdirectory for temporary files
-        std::string uniqueDir = std::to_string(GetCurrentProcessId()) + "_" + 
-                               std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-        std::filesystem::path tempDir = std::filesystem::path(tempPath) / "Model_Builder_Tool" / uniqueDir;
-        std::filesystem::create_directories(tempDir);
-        
-        // Create paths for temporary files
-        std::filesystem::path dataFile = tempDir / "timeseries_data.csv";
-        std::filesystem::path outputFile = tempDir / "timeseries_plot.png";
-        
-        // Create data CSV file
-        std::ofstream dataFileStream(dataFile);
-        if (!dataFileStream.is_open()) {
-            LOG_ERR("Failed to create data file", "PlotWidget");
-            return;
-        }
-        
-        dataFileStream << "index,actual,predicted\n";
-        size_t minSize = actualValues.size() < predictedValues.size() ? actualValues.size() : predictedValues.size();
-        for (size_t i = 0; i < minSize; ++i) {
-            dataFileStream << i << "," << actualValues[i] << "," << predictedValues[i] << "\n";
-        }
-        dataFileStream.close();
-        
-        // Get the path to the plotting script
-        std::filesystem::path scriptPath = PlottingUtility::getPlottingScriptPath();
-        if (scriptPath.empty()) {
-            LOG_ERR("Could not find plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Build the command to run the Python script
-        std::stringstream cmd;
-        cmd << "python \"" << formatPathForPython(scriptPath.string()) << "\"";
-        cmd << " --plot_type timeseries";
-        cmd << " --data_file \"" << formatPathForPython(dataFile.string()) << "\"";
-        cmd << " --output_file \"" << formatPathForPython(outputFile.string()) << "\"";
-        cmd << " --title \"" << title << "\"";
-        cmd << " --width " << (plotBox->w() / 100.0);
-        cmd << " --height " << (plotBox->h() / 100.0);
-        
-        // Store path for later use (needed for saving plots)
-        tempFilePaths[tempDataPath] = dataFile.string();
-        tempFilePaths[tempImagePath] = outputFile.string();
-        
-        // Run the command
-        int result = std::system(cmd.str().c_str());
-        if (result != 0) {
-            LOG_ERR("Failed to run plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Load the generated image
-        Fl_PNG_Image* pngImage = new Fl_PNG_Image(outputFile.string().c_str());
-        if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-            // Store the image dimensions
-            plotImageWidth = pngImage->w();
-            plotImageHeight = pngImage->h();
-
-            // Create a new buffer for the image data
-            if (plotImageData) {
-                delete[] plotImageData;
-            }
-            plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
-
-            // Copy the image data
-            const char* imageData = (const char*)pngImage->data()[0];
-            int depth = pngImage->d();
-
-            for (int y = 0; y < plotImageHeight; y++) {
-                for (int x = 0; x < plotImageWidth; x++) {
-                    int srcIdx = (y * plotImageWidth + x) * depth;
-                    int dstIdx = (y * plotImageWidth + x) * 3;
-
-                    if (depth >= 3) {
-                        // RGB data
-                        plotImageData[dstIdx] = imageData[srcIdx];     // R
-                        plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
-                        plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
-                    } else if (depth == 1) {
-                        // Grayscale
-                        plotImageData[dstIdx] = 
-                        plotImageData[dstIdx+1] = 
-                        plotImageData[dstIdx+2] = imageData[srcIdx];
-                    }
-                }
-            }
-            
-            delete pngImage;
-            redraw();
-        } else {
-            LOG_ERR("Failed to load the generated plot image", "PlotWidget");
-        }
-    }
-    catch (const std::exception& e) {
-        LOG_ERR("Error creating timeseries plot: " + std::string(e.what()), "PlotWidget");
-    }
-}
-
-void PlotWidget::createImportancePlot(const std::unordered_map<std::string, double>& importance,
-                                    const std::string& title,
-                                    const std::string& tempDataPath,
-                                    const std::string& tempImagePath,
-                                    const std::string& tempScriptPath)
-{
-    // Store data for regeneration
-    currentPlotType = PlotType::Importance;
-    storedImportance = importance;
-    storedTitle = title;
-
-    try {
-        // Get Windows temp directory
-        char tempPath[MAX_PATH];
-        if (GetTempPathA(MAX_PATH, tempPath) == 0) {
-            LOG_ERR("Failed to get temp directory", "PlotWidget");
-            return;
-        }
-
-        // Create a unique subdirectory for temporary files
-        std::string uniqueDir = std::to_string(GetCurrentProcessId()) + "_" + 
-                               std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-        std::filesystem::path tempDir = std::filesystem::path(tempPath) / "Model_Builder_Tool" / uniqueDir;
-        std::filesystem::create_directories(tempDir);
-        
-        // Create paths for temporary files
-        std::filesystem::path dataFile = tempDir / "importance_data.csv";
-        std::filesystem::path outputFile = tempDir / "importance_plot.png";
-        
-        // Create data CSV file
-        std::ofstream dataFileStream(dataFile);
-        if (!dataFileStream.is_open()) {
-            LOG_ERR("Failed to create data file", "PlotWidget");
-            return;
-        }
-        
-        dataFileStream << "feature,importance\n";
-        for (const auto& pair : importance) {
-            dataFileStream << pair.first << "," << pair.second << "\n";
-        }
-        dataFileStream.close();
-        
-        // Get the path to the plotting script
-        std::filesystem::path scriptPath = PlottingUtility::getPlottingScriptPath();
-        if (scriptPath.empty()) {
-            LOG_ERR("Could not find plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Build the command to run the Python script
-        std::stringstream cmd;
-        cmd << "python \"" << formatPathForPython(scriptPath.string()) << "\"";
-        cmd << " --plot_type importance";
-        cmd << " --data_file \"" << formatPathForPython(dataFile.string()) << "\"";
-        cmd << " --output_file \"" << formatPathForPython(outputFile.string()) << "\"";
-        cmd << " --title \"" << title << "\"";
-        cmd << " --width " << (plotBox->w() / 100.0);
-        cmd << " --height " << (plotBox->h() / 100.0);
-        
-        // Store path for later use (needed for saving plots)
-        tempFilePaths[tempDataPath] = dataFile.string();
-        tempFilePaths[tempImagePath] = outputFile.string();
-        
-        // Run the command
-        int result = std::system(cmd.str().c_str());
-        if (result != 0) {
-            LOG_ERR("Failed to run plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Load the generated image
-        Fl_PNG_Image* pngImage = new Fl_PNG_Image(outputFile.string().c_str());
-        if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-            // Store the image dimensions
-            plotImageWidth = pngImage->w();
-            plotImageHeight = pngImage->h();
-
-            // Create a new buffer for the image data
-            if (plotImageData) {
-                delete[] plotImageData;
-            }
-            plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
-
-            // Copy the image data
-            const char* imageData = (const char*)pngImage->data()[0];
-            int depth = pngImage->d();
-
-            for (int y = 0; y < plotImageHeight; y++) {
-                for (int x = 0; x < plotImageWidth; x++) {
-                    int srcIdx = (y * plotImageWidth + x) * depth;
-                    int dstIdx = (y * plotImageWidth + x) * 3;
-
-                    if (depth >= 3) {
-                        // RGB data
-                        plotImageData[dstIdx] = imageData[srcIdx];     // R
-                        plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
-                        plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
-                    } else if (depth == 1) {
-                        // Grayscale
-                        plotImageData[dstIdx] = 
-                        plotImageData[dstIdx+1] = 
-                        plotImageData[dstIdx+2] = imageData[srcIdx];
-                    }
-                }
-            }
-            
-            delete pngImage;
-            redraw();
-        } else {
-            LOG_ERR("Failed to load the generated plot image", "PlotWidget");
-        }
-    }
-    catch (const std::exception& e) {
-        LOG_ERR("Error creating importance plot: " + std::string(e.what()), "PlotWidget");
-    }
-}
-
-bool PlotWidget::savePlot(const std::string& filename) {
-    // Create temporary file paths with properly managed temp directory paths
-    std::string tempFileBaseName = std::to_string(reinterpret_cast<uintptr_t>(this));
-    std::string tempDataPath = "temp_plot_data_" + tempFileBaseName + ".csv";
-    std::string tempImagePath = "temp_plot_image_" + tempFileBaseName + ".png";
-    std::string tempScriptPath = "temp_plot_script_" + tempFileBaseName + ".py";
-    
-    // Create empty temporary files to generate proper paths
-    if (!createTempDataFile("", tempDataPath) || 
-        !createTempDataFile("", tempImagePath) || 
-        !createTempDataFile("", tempScriptPath)) {
-        LOG_ERR("Failed to create temporary files for saving plot", "PlotWidget");
-        return false;
+    if (xValues.empty() || yValues.empty()) {
+        LOG_ERR("Cannot create scatter plot with empty data", "PlotWidget");
+        return;
     }
     
-    // Use the full paths from the tempFilePaths map
-    std::string fullTempDataPath = tempFilePaths[tempDataPath];
-    std::string fullTempImagePath = tempFilePaths[tempImagePath];
-    std::string fullTempScriptPath = tempFilePaths[tempScriptPath];
-
-    // Regenerate the plot with these specific temporary files
-    switch (currentPlotType) {
-        case PlotType::Scatter:
-            createScatterPlot(storedActualValues, storedPredictedValues, 
-                            storedXLabel, storedYLabel, storedTitle,
-                            fullTempDataPath, fullTempImagePath, fullTempScriptPath);
-            break;
-        case PlotType::Timeseries:
-            createTimeseriesPlot(storedActualValues, storedPredictedValues, storedTitle,
-                                fullTempDataPath, fullTempImagePath, fullTempScriptPath);
-            break;
-        case PlotType::Importance:
-            createImportancePlot(storedImportance, storedTitle, fullTempDataPath, fullTempImagePath, fullTempScriptPath);
-            break;
-        case PlotType::None:
-            return false;
-        case PlotType::Residual:
-            createResidualPlot(storedActualValues, storedPredictedValues, storedTitle,
-                               fullTempDataPath, fullTempImagePath, fullTempScriptPath);
-            break;
-        case PlotType::LearningCurve:
-            createLearningCurvePlot(storedTrainingScores, storedValidationScores, storedTrainingSizes, storedTitle,
-                                    fullTempDataPath, fullTempImagePath, fullTempScriptPath);
-            break;
-        case PlotType::NeuralNetworkArchitecture:
-            createNeuralNetworkArchitecturePlot(storedLayerSizes, storedTitle,
-                                               fullTempDataPath, fullTempImagePath, fullTempScriptPath);
-            break;
-        case PlotType::TreeVisualization:
-            createTreeVisualizationPlot(storedTreeStructure, storedTitle,
-                                        fullTempDataPath, fullTempImagePath, fullTempScriptPath);
-            break;
+    if (xValues.size() != yValues.size()) {
+        LOG_ERR("Cannot create scatter plot with mismatched data sizes: X=" + 
+                std::to_string(xValues.size()) + ", Y=" + std::to_string(yValues.size()), "PlotWidget");
+        return;
     }
+    
+    // Store plot data
+    this->xValues = xValues;
+    this->yValues = yValues;
+    this->xLabel = xLabel;
+    this->yLabel = yLabel;
+    this->plotType = PlotType::SCATTER;
+    
+    LOG_INFO("Scatter plot created successfully with " + std::to_string(xValues.size()) + " points", "PlotWidget");
+}
 
-    // Copy the generated plot to the target location
+void PlotWidget::createTimeSeriesPlot(
+    const std::vector<double>& actual, 
+    const std::vector<double>& predicted
+) {
+    LOG_DEBUG("Creating time series plot with " + std::to_string(actual.size()) + " points", "PlotWidget");
+    
+    if (actual.empty() || predicted.empty()) {
+        LOG_ERR("Cannot create time series plot with empty data", "PlotWidget");
+        return;
+    }
+    
+    if (actual.size() != predicted.size()) {
+        LOG_ERR("Cannot create time series plot with mismatched data sizes: Actual=" + 
+                std::to_string(actual.size()) + ", Predicted=" + std::to_string(predicted.size()), "PlotWidget");
+        return;
+    }
+    
+    // Create x values as indices
+    std::vector<double> indices(actual.size());
+    for (size_t i = 0; i < actual.size(); ++i) {
+        indices[i] = static_cast<double>(i);
+    }
+    
+    // Store plot data
+    this->xValues = indices;
+    this->yValues = actual;
+    this->y2Values = predicted;
+    this->xLabel = "Time";
+    this->yLabel = "Value";
+    this->plotType = PlotType::TIME_SERIES;
+    
+    LOG_INFO("Time series plot created successfully with " + std::to_string(actual.size()) + " points", "PlotWidget");
+}
+
+void PlotWidget::createResidualPlot(
+    const std::vector<double>& predicted,
+    const std::vector<double>& residuals
+) {
+    LOG_DEBUG("Creating residual plot with " + std::to_string(predicted.size()) + " points", "PlotWidget");
+    
+    if (predicted.empty() || residuals.empty()) {
+        LOG_ERR("Cannot create residual plot with empty data", "PlotWidget");
+        return;
+    }
+    
+    if (predicted.size() != residuals.size()) {
+        LOG_ERR("Cannot create residual plot with mismatched data sizes: Predicted=" + 
+                std::to_string(predicted.size()) + ", Residuals=" + std::to_string(residuals.size()), "PlotWidget");
+        return;
+    }
+    
+    // Store plot data
+    this->xValues = predicted;
+    this->yValues = residuals;
+    this->xLabel = "Predicted";
+    this->yLabel = "Residual";
+    this->plotType = PlotType::RESIDUAL;
+    
+    LOG_INFO("Residual plot created successfully with " + std::to_string(residuals.size()) + " points", "PlotWidget");
+}
+
+void PlotWidget::createImportancePlot(
+    const std::unordered_map<std::string, double>& importance
+) {
+    LOG_DEBUG("Creating importance plot with " + std::to_string(importance.size()) + " features", "PlotWidget");
+    
+    if (importance.empty()) {
+        LOG_ERR("Cannot create importance plot with empty data", "PlotWidget");
+        return;
+    }
+    
+    // Store plot data
+    this->importanceValues = importance;
+    this->xLabel = "Importance";
+    this->yLabel = "Feature";
+    this->plotType = PlotType::IMPORTANCE;
+    
+    // Log feature names and their importance values for debugging
+    std::stringstream ss;
+    ss << "Features: ";
+    for (const auto& [feature, value] : importance) {
+        ss << feature << "=" << value << ", ";
+    }
+    LOG_DEBUG(ss.str(), "PlotWidget");
+    
+    LOG_INFO("Importance plot created successfully with " + std::to_string(importance.size()) + " features", "PlotWidget");
+}
+
+void PlotWidget::createLearningCurvePlot(
+    const std::vector<double>& trainSizes,
+    const std::vector<double>& trainScores,
+    const std::vector<double>& validScores
+) {
+    LOG_DEBUG("Creating learning curve plot with " + std::to_string(trainSizes.size()) + " points", "PlotWidget");
+    
+    if (trainSizes.empty() || trainScores.empty()) {
+        LOG_ERR("Cannot create learning curve plot with empty data", "PlotWidget");
+        return;
+    }
+    
+    if (trainSizes.size() != trainScores.size()) {
+        LOG_ERR("Cannot create learning curve plot with mismatched data sizes: TrainSizes=" + 
+                std::to_string(trainSizes.size()) + ", TrainScores=" + std::to_string(trainScores.size()), "PlotWidget");
+        return;
+    }
+    
+    if (!validScores.empty() && trainSizes.size() != validScores.size()) {
+        LOG_ERR("Cannot create learning curve plot with mismatched validation data size: TrainSizes=" + 
+                std::to_string(trainSizes.size()) + ", ValidScores=" + std::to_string(validScores.size()), "PlotWidget");
+        return;
+    }
+    
+    // Store plot data
+    this->trainingSizes = trainSizes;
+    this->trainingScores = trainScores;
+    this->validationScores = validScores;
+    this->xLabel = "Training Examples";
+    this->yLabel = "Score";
+    this->plotType = PlotType::LEARNING_CURVE;
+    
+    LOG_INFO("Learning curve plot created successfully with " + std::to_string(trainSizes.size()) + " points", "PlotWidget");
+}
+
+void PlotWidget::createLossCurvePlot(
+    const std::vector<double>& epochs,
+    const std::vector<double>& trainLoss,
+    const std::vector<double>& validLoss
+) {
+    LOG_DEBUG("Creating loss curve plot with " + std::to_string(epochs.size()) + " epochs", "PlotWidget");
+    
+    if (epochs.empty() || trainLoss.empty()) {
+        LOG_ERR("Cannot create loss curve plot with empty data", "PlotWidget");
+        return;
+    }
+    
+    if (epochs.size() != trainLoss.size()) {
+        LOG_ERR("Cannot create loss curve plot with mismatched data sizes: Epochs=" + 
+                std::to_string(epochs.size()) + ", TrainLoss=" + std::to_string(trainLoss.size()), "PlotWidget");
+        return;
+    }
+    
+    if (!validLoss.empty() && epochs.size() != validLoss.size()) {
+        LOG_ERR("Cannot create loss curve plot with mismatched validation data size: Epochs=" + 
+                std::to_string(epochs.size()) + ", ValidLoss=" + std::to_string(validLoss.size()), "PlotWidget");
+        return;
+    }
+    
+    // Store plot data
+    this->epochs = epochs;
+    this->trainLoss = trainLoss;
+    this->validLoss = validLoss;
+    this->xLabel = "Epoch";
+    this->yLabel = "Loss";
+    this->plotType = PlotType::LOSS_CURVE;
+    
+    LOG_INFO("Loss curve plot created successfully with " + std::to_string(epochs.size()) + " epochs", "PlotWidget");
+}
+
+bool PlotWidget::savePlotToFile(const std::string& filename) {
+    LOG_DEBUG("Attempting to save plot to file: " + (filename.empty() ? "auto-generated filename" : filename), "PlotWidget");
+    
+    std::string outputFile = filename;
+    
+    if (outputFile.empty()) {
+        // Generate a default filename based on plot type and title
+        std::string safeTitle = title;
+        // Replace spaces and special characters
+        std::replace(safeTitle.begin(), safeTitle.end(), ' ', '_');
+        std::replace(safeTitle.begin(), safeTitle.end(), '/', '_');
+        std::replace(safeTitle.begin(), safeTitle.end(), '\\', '_');
+        
+        outputFile = safeTitle + ".png";
+    }
+    
+    // TODO: Implement actual plot saving using ImGui screenshot functionality
+    // Currently this would require additional implementation for ImGui/ImPlot
+    
+    LOG_WARNING("Plot saving to file not yet implemented: " + outputFile, "PlotWidget");
+    return false;
+}
+
+void PlotWidget::setTitle(const std::string& title) {
+    LOG_DEBUG("Setting plot title to: " + title, "PlotWidget");
+    this->title = title;
+}
+
+void PlotWidget::render() {
+    LOG_DEBUG("Rendering plot of type: " + std::to_string(static_cast<int>(plotType)) + 
+              ", title: " + title, "PlotWidget");
+    
     try {
-        std::filesystem::path sourcePath(fullTempImagePath);
-        std::filesystem::path targetPath(filename);
+        // Set flags for plot rendering
+        ImPlotFlags plotFlags = ImPlotFlags_NoBoxSelect | ImPlotFlags_NoMenus;
         
-        // Create the target directory if it doesn't exist
-        std::filesystem::create_directories(targetPath.parent_path());
+        // Render the appropriate plot based on type
+        switch (plotType) {
+            case PlotType::SCATTER:
+                renderScatterPlot();
+                break;
+                
+            case PlotType::TIME_SERIES:
+                renderTimeSeriesPlot();
+                break;
+                
+            case PlotType::RESIDUAL:
+                renderResidualPlot();
+                break;
+                
+            case PlotType::IMPORTANCE:
+                renderImportancePlot();
+                break;
+                
+            case PlotType::LEARNING_CURVE:
+                renderLearningCurvePlot();
+                break;
+                
+            case PlotType::LOSS_CURVE:
+                renderLossCurvePlot();
+                break;
+                
+            case PlotType::NONE:
+            default:
+                LOG_WARNING("No plot data available to render", "PlotWidget");
+                ImGui::TextWrapped("No plot data available.");
+                break;
+        }
         
-        // Copy the file
-        std::filesystem::copy_file(sourcePath, targetPath, 
-                                 std::filesystem::copy_options::overwrite_existing);
-
-        // Clean up temporary files only after successful copy
-        std::remove(fullTempScriptPath.c_str());
-        std::remove(fullTempDataPath.c_str());
-        std::remove(fullTempImagePath.c_str());
-        
-        return true;
+        LOG_DEBUG("Plot rendering completed successfully", "PlotWidget");
     }
     catch (const std::exception& e) {
-        fl_alert("Failed to save plot: %s", e.what());
-        return false;
+        LOG_ERR("Exception during plot rendering: " + std::string(e.what()), "PlotWidget");
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error rendering plot: %s", e.what());
+    }
+    catch (...) {
+        LOG_ERR("Unknown exception during plot rendering", "PlotWidget");
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Unknown error rendering plot");
     }
 }
 
-void PlotWidget::createResidualPlot(const std::vector<double>& actualValues,
-                                  const std::vector<double>& predictedValues,
-                                  const std::string& title,
-                                  const std::string& tempDataPath,
-                                  const std::string& tempImagePath,
-                                  const std::string& tempScriptPath)
-{
-    // Store data for regeneration
-    currentPlotType = PlotType::Residual;
-    storedActualValues = actualValues;
-    storedPredictedValues = predictedValues;
-    storedTitle = title;
-
+void PlotWidget::renderScatterPlot() {
+    LOG_DEBUG("Rendering scatter plot with " + std::to_string(xValues.size()) + " points", "PlotWidget");
+    
     try {
-        // Get Windows temp directory
-        char tempPath[MAX_PATH];
-        if (GetTempPathA(MAX_PATH, tempPath) == 0) {
-            LOG_ERR("Failed to get temp directory", "PlotWidget");
-            return;
-        }
-
-        // Create a unique subdirectory for temporary files
-        std::string uniqueDir = std::to_string(GetCurrentProcessId()) + "_" + 
-                               std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-        std::filesystem::path tempDir = std::filesystem::path(tempPath) / "Model_Builder_Tool" / uniqueDir;
-        std::filesystem::create_directories(tempDir);
-        
-        // Create paths for temporary files
-        std::filesystem::path dataFile = tempDir / "residual_data.csv";
-        std::filesystem::path outputFile = tempDir / "residual_plot.png";
-        
-        // Create data CSV file
-        std::ofstream dataFileStream(dataFile);
-        if (!dataFileStream.is_open()) {
-            LOG_ERR("Failed to create data file", "PlotWidget");
-            return;
-        }
-        
-        // Calculate residuals (actual - predicted)
-        dataFileStream << "actual,predicted,residual\n";
-        size_t minSize = actualValues.size() < predictedValues.size() ? actualValues.size() : predictedValues.size();
-        for (size_t i = 0; i < minSize; ++i) {
-            double residual = actualValues[i] - predictedValues[i];
-            dataFileStream << actualValues[i] << "," << predictedValues[i] << "," << residual << "\n";
-        }
-        dataFileStream.close();
-        
-        // Get the path to the plotting script
-        std::filesystem::path scriptPath = PlottingUtility::getPlottingScriptPath();
-        if (scriptPath.empty()) {
-            LOG_ERR("Could not find plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Build the command to run the Python script
-        std::stringstream cmd;
-        cmd << "python \"" << formatPathForPython(scriptPath.string()) << "\"";
-        cmd << " --plot_type residual";
-        cmd << " --data_file \"" << formatPathForPython(dataFile.string()) << "\"";
-        cmd << " --output_file \"" << formatPathForPython(outputFile.string()) << "\"";
-        cmd << " --title \"" << title << "\"";
-        cmd << " --width " << (plotBox->w() / 100.0);
-        cmd << " --height " << (plotBox->h() / 100.0);
-        
-        // Store path for later use (needed for saving plots)
-        tempFilePaths[tempDataPath] = dataFile.string();
-        tempFilePaths[tempImagePath] = outputFile.string();
-        
-        // Run the command
-        int result = std::system(cmd.str().c_str());
-        if (result != 0) {
-            LOG_ERR("Failed to run plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Load the generated image
-        Fl_PNG_Image* pngImage = new Fl_PNG_Image(outputFile.string().c_str());
-        if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-            // Store the image dimensions
-            plotImageWidth = pngImage->w();
-            plotImageHeight = pngImage->h();
-
-            // Create a new buffer for the image data
-            if (plotImageData) {
-                delete[] plotImageData;
-            }
-            plotImageData = new char[plotImageWidth * plotImageHeight * 3];  // RGB format
-
-            // Copy the image data
-            const char* imageData = (const char*)pngImage->data()[0];
-            int depth = pngImage->d();
-
-            for (int y = 0; y < plotImageHeight; y++) {
-                for (int x = 0; x < plotImageWidth; x++) {
-                    int srcIdx = (y * plotImageWidth + x) * depth;
-                    int dstIdx = (y * plotImageWidth + x) * 3;
-
-                    if (depth >= 3) {
-                        // RGB data
-                        plotImageData[dstIdx] = imageData[srcIdx];     // R
-                        plotImageData[dstIdx+1] = imageData[srcIdx+1]; // G
-                        plotImageData[dstIdx+2] = imageData[srcIdx+2]; // B
-                    } else if (depth == 1) {
-                        // Grayscale
-                        plotImageData[dstIdx] = 
-                        plotImageData[dstIdx+1] = 
-                        plotImageData[dstIdx+2] = imageData[srcIdx];
-                    }
-                }
+        if (ImPlot::BeginPlot(title.c_str(), ImVec2(-1, -1))) {
+            ImPlot::SetupAxes(xLabel.c_str(), yLabel.c_str());
+            
+            // Add scatter plot
+            ImPlot::PlotScatter("Data", 
+                              xValues.data(), 
+                              yValues.data(), 
+                              static_cast<int>(xValues.size()));
+            
+            // Add identity line (y=x) if data range allows
+            if (!xValues.empty() && !yValues.empty()) {
+                double minX = *std::min_element(xValues.begin(), xValues.end());
+                double maxX = *std::max_element(xValues.begin(), xValues.end());
+                double minY = *std::min_element(yValues.begin(), yValues.end());
+                double maxY = *std::max_element(yValues.begin(), yValues.end());
+                
+                double min = std::min(minX, minY);
+                double max = std::max(maxX, maxY);
+                
+                std::vector<double> lineX = {min, max};
+                std::vector<double> lineY = {min, max};
+                
+                ImPlot::PlotLine("y=x", lineX.data(), lineY.data(), static_cast<int>(lineX.size()));
+                
+                LOG_DEBUG("Added identity line from " + std::to_string(min) + " to " + std::to_string(max), "PlotWidget");
             }
             
-            delete pngImage;
-            redraw();
+            ImPlot::EndPlot();
+            LOG_DEBUG("Scatter plot rendering completed", "PlotWidget");
         } else {
-            LOG_ERR("Failed to load the generated plot image", "PlotWidget");
+            LOG_ERR("Failed to begin scatter plot", "PlotWidget");
         }
     }
     catch (const std::exception& e) {
-        LOG_ERR("Error creating residual plot: " + std::string(e.what()), "PlotWidget");
+        LOG_ERR("Exception during scatter plot rendering: " + std::string(e.what()), "PlotWidget");
+        throw;
     }
 }
 
-void PlotWidget::createLearningCurvePlot(const std::vector<double>& trainingScores,
-                                       const std::vector<double>& validationScores,
-                                       const std::vector<int>& trainingSizes,
-                                       const std::string& title,
-                                       const std::string& tempDataPath,
-                                       const std::string& tempImagePath,
-                                       const std::string& tempScriptPath)
-{
-    // Store data for regeneration
-    currentPlotType = PlotType::LearningCurve;
-    storedTrainingScores = trainingScores;
-    storedValidationScores = validationScores;
-    storedTrainingSizes = trainingSizes;
-    storedTitle = title;
-
+void PlotWidget::renderTimeSeriesPlot() {
+    LOG_DEBUG("Rendering time series plot with " + std::to_string(yValues.size()) + 
+              " actual and " + std::to_string(y2Values.size()) + " predicted points", "PlotWidget");
+    
     try {
-        // Get Windows temp directory
-        char tempPath[MAX_PATH];
-        if (GetTempPathA(MAX_PATH, tempPath) == 0) {
-            LOG_ERR("Failed to get temp directory", "PlotWidget");
-            return;
-        }
-
-        // Create a unique subdirectory for temporary files
-        std::string uniqueDir = std::to_string(GetCurrentProcessId()) + "_" + 
-                               std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-        std::filesystem::path tempDir = std::filesystem::path(tempPath) / "Model_Builder_Tool" / uniqueDir;
-        std::filesystem::create_directories(tempDir);
-        
-        // Create paths for temporary files
-        std::filesystem::path dataFile = tempDir / "learning_curve_data.csv";
-        std::filesystem::path outputFile = tempDir / "learning_curve_plot.png";
-        
-        // Create data CSV file
-        std::ofstream dataFileStream(dataFile);
-        if (!dataFileStream.is_open()) {
-            LOG_ERR("Failed to create data file", "PlotWidget");
-            return;
-        }
-        
-        // Store learning curve data
-        dataFileStream << "training_size,training_score,validation_score\n";
-        size_t minSize = std::min(trainingSizes.size(), std::min(trainingScores.size(), validationScores.size()));
-        for (size_t i = 0; i < minSize; ++i) {
-            dataFileStream << trainingSizes[i] << "," << trainingScores[i] << "," << validationScores[i] << "\n";
-        }
-        dataFileStream.close();
-        
-        // Get the path to the plotting script
-        std::filesystem::path scriptPath = PlottingUtility::getPlottingScriptPath();
-        if (scriptPath.empty()) {
-            LOG_ERR("Could not find plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Build the command to run the Python script
-        std::stringstream cmd;
-        cmd << "python \"" << formatPathForPython(scriptPath.string()) << "\"";
-        cmd << " --plot_type learning_curve";
-        cmd << " --data_file \"" << formatPathForPython(dataFile.string()) << "\"";
-        cmd << " --output_file \"" << formatPathForPython(outputFile.string()) << "\"";
-        cmd << " --title \"" << title << "\"";
-        cmd << " --width " << (plotBox->w() / 100.0);
-        cmd << " --height " << (plotBox->h() / 100.0);
-        
-        // Store path for later use (needed for saving plots)
-        tempFilePaths[tempDataPath] = dataFile.string();
-        tempFilePaths[tempImagePath] = outputFile.string();
-        
-        // Run the command
-        int result = std::system(cmd.str().c_str());
-        if (result != 0) {
-            LOG_ERR("Failed to run plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Load the generated image
-        Fl_PNG_Image* pngImage = new Fl_PNG_Image(outputFile.string().c_str());
-        if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-            // Processing image code (same as other methods)
-            plotImageWidth = pngImage->w();
-            plotImageHeight = pngImage->h();
-
-            if (plotImageData) {
-                delete[] plotImageData;
-            }
-            plotImageData = new char[plotImageWidth * plotImageHeight * 3];
-
-            const char* imageData = (const char*)pngImage->data()[0];
-            int depth = pngImage->d();
-
-            for (int y = 0; y < plotImageHeight; y++) {
-                for (int x = 0; x < plotImageWidth; x++) {
-                    int srcIdx = (y * plotImageWidth + x) * depth;
-                    int dstIdx = (y * plotImageWidth + x) * 3;
-
-                    if (depth >= 3) {
-                        plotImageData[dstIdx] = imageData[srcIdx];
-                        plotImageData[dstIdx+1] = imageData[srcIdx+1];
-                        plotImageData[dstIdx+2] = imageData[srcIdx+2];
-                    } else if (depth == 1) {
-                        plotImageData[dstIdx] = 
-                        plotImageData[dstIdx+1] = 
-                        plotImageData[dstIdx+2] = imageData[srcIdx];
-                    }
-                }
-            }
+        if (ImPlot::BeginPlot(title.c_str(), ImVec2(-1, -1))) {
+            ImPlot::SetupAxes(xLabel.c_str(), yLabel.c_str());
             
-            delete pngImage;
-            redraw();
+            // Add actual values line
+            ImPlot::PlotLine("Actual", 
+                           xValues.data(), 
+                           yValues.data(), 
+                           static_cast<int>(xValues.size()));
+            
+            // Add predicted values line
+            ImPlot::PlotLine("Predicted", 
+                           xValues.data(), 
+                           y2Values.data(), 
+                           static_cast<int>(xValues.size()));
+            
+            ImPlot::EndPlot();
+            LOG_DEBUG("Time series plot rendering completed", "PlotWidget");
         } else {
-            LOG_ERR("Failed to load the generated plot image", "PlotWidget");
+            LOG_ERR("Failed to begin time series plot", "PlotWidget");
         }
     }
     catch (const std::exception& e) {
-        LOG_ERR("Error creating learning curve plot: " + std::string(e.what()), "PlotWidget");
+        LOG_ERR("Exception during time series plot rendering: " + std::string(e.what()), "PlotWidget");
+        throw;
     }
 }
 
-void PlotWidget::createNeuralNetworkArchitecturePlot(const std::vector<int>& layerSizes,
-                                                   const std::string& title,
-                                                   const std::string& tempDataPath,
-                                                   const std::string& tempImagePath,
-                                                   const std::string& tempScriptPath)
-{
-    // Store data for regeneration
-    currentPlotType = PlotType::NeuralNetworkArchitecture;
-    storedLayerSizes = layerSizes;
-    storedTitle = title;
-
+void PlotWidget::renderResidualPlot() {
+    LOG_DEBUG("Rendering residual plot with " + std::to_string(xValues.size()) + " points", "PlotWidget");
+    
     try {
-        // Get Windows temp directory
-        char tempPath[MAX_PATH];
-        if (GetTempPathA(MAX_PATH, tempPath) == 0) {
-            LOG_ERR("Failed to get temp directory", "PlotWidget");
-            return;
-        }
-
-        // Create a unique subdirectory for temporary files
-        std::string uniqueDir = std::to_string(GetCurrentProcessId()) + "_" + 
-                               std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-        std::filesystem::path tempDir = std::filesystem::path(tempPath) / "Model_Builder_Tool" / uniqueDir;
-        std::filesystem::create_directories(tempDir);
-        
-        // Create paths for temporary files
-        std::filesystem::path dataFile = tempDir / "nn_data.csv";
-        std::filesystem::path outputFile = tempDir / "nn_plot.png";
-        
-        // Create data CSV file
-        std::ofstream dataFileStream(dataFile);
-        if (!dataFileStream.is_open()) {
-            LOG_ERR("Failed to create data file", "PlotWidget");
-            return;
-        }
-        
-        // Store neural network architecture data
-        dataFileStream << "layer_index,layer_size\n";
-        for (size_t i = 0; i < layerSizes.size(); ++i) {
-            dataFileStream << i << "," << layerSizes[i] << "\n";
-        }
-        dataFileStream.close();
-        
-        // Get the path to the plotting script
-        std::filesystem::path scriptPath = PlottingUtility::getPlottingScriptPath();
-        if (scriptPath.empty()) {
-            LOG_ERR("Could not find plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Build the command to run the Python script
-        std::stringstream cmd;
-        cmd << "python \"" << formatPathForPython(scriptPath.string()) << "\"";
-        cmd << " --plot_type neural_network";
-        cmd << " --data_file \"" << formatPathForPython(dataFile.string()) << "\"";
-        cmd << " --output_file \"" << formatPathForPython(outputFile.string()) << "\"";
-        cmd << " --title \"" << title << "\"";
-        cmd << " --width " << (plotBox->w() / 100.0);
-        cmd << " --height " << (plotBox->h() / 100.0);
-        
-        // Store path for later use (needed for saving plots)
-        tempFilePaths[tempDataPath] = dataFile.string();
-        tempFilePaths[tempImagePath] = outputFile.string();
-        
-        // Run the command
-        int result = std::system(cmd.str().c_str());
-        if (result != 0) {
-            LOG_ERR("Failed to run plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Load image - same code pattern as other methods
-        Fl_PNG_Image* pngImage = new Fl_PNG_Image(outputFile.string().c_str());
-        if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-            // Process the image - same as other plot methods
-            plotImageWidth = pngImage->w();
-            plotImageHeight = pngImage->h();
-
-            if (plotImageData) {
-                delete[] plotImageData;
-            }
-            plotImageData = new char[plotImageWidth * plotImageHeight * 3];
-
-            const char* imageData = (const char*)pngImage->data()[0];
-            int depth = pngImage->d();
-
-            for (int y = 0; y < plotImageHeight; y++) {
-                for (int x = 0; x < plotImageWidth; x++) {
-                    int srcIdx = (y * plotImageWidth + x) * depth;
-                    int dstIdx = (y * plotImageWidth + x) * 3;
-
-                    if (depth >= 3) {
-                        plotImageData[dstIdx] = imageData[srcIdx];
-                        plotImageData[dstIdx+1] = imageData[srcIdx+1];
-                        plotImageData[dstIdx+2] = imageData[srcIdx+2];
-                    } else if (depth == 1) {
-                        plotImageData[dstIdx] = 
-                        plotImageData[dstIdx+1] = 
-                        plotImageData[dstIdx+2] = imageData[srcIdx];
-                    }
-                }
+        if (ImPlot::BeginPlot(title.c_str(), ImVec2(-1, -1))) {
+            ImPlot::SetupAxes(xLabel.c_str(), yLabel.c_str());
+            
+            // Add residual scatter plot
+            ImPlot::PlotScatter("Residuals", 
+                              xValues.data(), 
+                              yValues.data(), 
+                              static_cast<int>(xValues.size()));
+            
+            // Add zero line
+            if (!xValues.empty()) {
+                double minX = *std::min_element(xValues.begin(), xValues.end());
+                double maxX = *std::max_element(xValues.begin(), xValues.end());
+                std::vector<double> lineX = {minX, maxX};
+                std::vector<double> lineY = {0.0, 0.0};
+                
+                ImPlot::PlotLine("Zero", lineX.data(), lineY.data(), static_cast<int>(lineX.size()));
+                
+                LOG_DEBUG("Added zero line from x=" + std::to_string(minX) + " to x=" + std::to_string(maxX), "PlotWidget");
             }
             
-            delete pngImage;
-            redraw();
+            ImPlot::EndPlot();
+            LOG_DEBUG("Residual plot rendering completed", "PlotWidget");
         } else {
-            LOG_ERR("Failed to load the generated plot image", "PlotWidget");
+            LOG_ERR("Failed to begin residual plot", "PlotWidget");
         }
     }
     catch (const std::exception& e) {
-        LOG_ERR("Error creating neural network architecture plot: " + std::string(e.what()), "PlotWidget");
+        LOG_ERR("Exception during residual plot rendering: " + std::string(e.what()), "PlotWidget");
+        throw;
     }
 }
 
-void PlotWidget::createTreeVisualizationPlot(const std::string& treeStructure,
-                                           const std::string& title,
-                                           const std::string& tempDataPath,
-                                           const std::string& tempImagePath,
-                                           const std::string& tempScriptPath)
-{
-    // Store data for regeneration
-    currentPlotType = PlotType::TreeVisualization;
-    storedTreeStructure = treeStructure;
-    storedTitle = title;
-
+void PlotWidget::renderImportancePlot() {
+    LOG_DEBUG("Rendering importance plot with " + std::to_string(importanceValues.size()) + " features", "PlotWidget");
+    
     try {
-        // Get Windows temp directory
-        char tempPath[MAX_PATH];
-        if (GetTempPathA(MAX_PATH, tempPath) == 0) {
-            LOG_ERR("Failed to get temp directory", "PlotWidget");
-            return;
-        }
-
-        // Create a unique subdirectory for temporary files
-        std::string uniqueDir = std::to_string(GetCurrentProcessId()) + "_" + 
-                               std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-        std::filesystem::path tempDir = std::filesystem::path(tempPath) / "Model_Builder_Tool" / uniqueDir;
-        std::filesystem::create_directories(tempDir);
-        
-        // Create paths for temporary files
-        std::filesystem::path dataFile = tempDir / "tree_data.txt";
-        std::filesystem::path outputFile = tempDir / "tree_plot.png";
-        
-        // Create data file - tree structure may be in a special format
-        std::ofstream dataFileStream(dataFile);
-        if (!dataFileStream.is_open()) {
-            LOG_ERR("Failed to create data file", "PlotWidget");
-            return;
-        }
-        
-        // Write tree structure data
-        dataFileStream << treeStructure;
-        dataFileStream.close();
-        
-        // Get the path to the plotting script
-        std::filesystem::path scriptPath = PlottingUtility::getPlottingScriptPath();
-        if (scriptPath.empty()) {
-            LOG_ERR("Could not find plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Build the command to run the Python script
-        std::stringstream cmd;
-        cmd << "python \"" << formatPathForPython(scriptPath.string()) << "\"";
-        cmd << " --plot_type tree";
-        cmd << " --data_file \"" << formatPathForPython(dataFile.string()) << "\"";
-        cmd << " --output_file \"" << formatPathForPython(outputFile.string()) << "\"";
-        cmd << " --title \"" << title << "\"";
-        cmd << " --width " << (plotBox->w() / 100.0);
-        cmd << " --height " << (plotBox->h() / 100.0);
-        
-        // Store path for later use (needed for saving plots)
-        tempFilePaths[tempDataPath] = dataFile.string();
-        tempFilePaths[tempImagePath] = outputFile.string();
-        
-        // Run the command
-        int result = std::system(cmd.str().c_str());
-        if (result != 0) {
-            LOG_ERR("Failed to run plotting script", "PlotWidget");
-            return;
-        }
-        
-        // Process the image
-        Fl_PNG_Image* pngImage = new Fl_PNG_Image(outputFile.string().c_str());
-        if (pngImage && pngImage->w() > 0 && pngImage->h() > 0) {
-            plotImageWidth = pngImage->w();
-            plotImageHeight = pngImage->h();
-
-            if (plotImageData) {
-                delete[] plotImageData;
-            }
-            plotImageData = new char[plotImageWidth * plotImageHeight * 3];
-
-            const char* imageData = (const char*)pngImage->data()[0];
-            int depth = pngImage->d();
-
-            for (int y = 0; y < plotImageHeight; y++) {
-                for (int x = 0; x < plotImageWidth; x++) {
-                    int srcIdx = (y * plotImageWidth + x) * depth;
-                    int dstIdx = (y * plotImageWidth + x) * 3;
-
-                    if (depth >= 3) {
-                        plotImageData[dstIdx] = imageData[srcIdx];
-                        plotImageData[dstIdx+1] = imageData[srcIdx+1];
-                        plotImageData[dstIdx+2] = imageData[srcIdx+2];
-                    } else if (depth == 1) {
-                        plotImageData[dstIdx] = 
-                        plotImageData[dstIdx+1] = 
-                        plotImageData[dstIdx+2] = imageData[srcIdx];
-                    }
-                }
+        if (ImPlot::BeginPlot(title.c_str(), ImVec2(-1, -1))) {
+            // For feature importance, we create a horizontal bar chart
+            ImPlot::SetupAxes(xLabel.c_str(), yLabel.c_str(), 
+                            ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+            
+            // Convert unordered_map to vectors and sort by importance
+            std::vector<std::pair<std::string, double>> sortedImportance;
+            for (const auto& pair : importanceValues) {
+                sortedImportance.push_back(pair);
             }
             
-            delete pngImage;
-            redraw();
+            std::sort(sortedImportance.begin(), sortedImportance.end(),
+                    [](const auto& a, const auto& b) {
+                        return a.second > b.second;
+                    });
+            
+            LOG_DEBUG("Sorted " + std::to_string(sortedImportance.size()) + " features by importance", "PlotWidget");
+            
+            // Prepare data for plotting
+            std::vector<double> values;
+            std::vector<const char*> labels;
+            
+            for (const auto& pair : sortedImportance) {
+                values.push_back(pair.second);
+                labels.push_back(pair.first.c_str());
+            }
+            
+            // Bar chart
+            ImPlot::PlotBars("Importance", values.data(), static_cast<int>(values.size()), 0.75, 0.0, ImPlotBarsFlags_Horizontal);
+            
+            ImPlot::EndPlot();
+            LOG_DEBUG("Importance plot rendering completed", "PlotWidget");
         } else {
-            LOG_ERR("Failed to load the generated plot image", "PlotWidget");
+            LOG_ERR("Failed to begin importance plot", "PlotWidget");
         }
     }
     catch (const std::exception& e) {
-        LOG_ERR("Error creating tree visualization plot: " + std::string(e.what()), "PlotWidget");
+        LOG_ERR("Exception during importance plot rendering: " + std::string(e.what()), "PlotWidget");
+        throw;
+    }
+}
+
+void PlotWidget::renderLearningCurvePlot() {
+    LOG_DEBUG("Rendering learning curve plot with " + std::to_string(trainingSizes.size()) + 
+              " training points and " + std::to_string(validationScores.size()) + " validation points", "PlotWidget");
+    
+    try {
+        if (ImPlot::BeginPlot(title.c_str(), ImVec2(-1, -1))) {
+            ImPlot::SetupAxes(xLabel.c_str(), yLabel.c_str());
+            
+            // Add training score line
+            ImPlot::PlotLine("Training Score", 
+                           trainingSizes.data(), 
+                           trainingScores.data(), 
+                           static_cast<int>(trainingSizes.size()));
+            
+            // Add validation score line
+            if (!validationScores.empty()) {
+                ImPlot::PlotLine("Validation Score", 
+                               trainingSizes.data(), 
+                               validationScores.data(), 
+                               static_cast<int>(trainingSizes.size()));
+            }
+            
+            ImPlot::EndPlot();
+            LOG_DEBUG("Learning curve plot rendering completed", "PlotWidget");
+        } else {
+            LOG_ERR("Failed to begin learning curve plot", "PlotWidget");
+        }
+    }
+    catch (const std::exception& e) {
+        LOG_ERR("Exception during learning curve plot rendering: " + std::string(e.what()), "PlotWidget");
+        throw;
+    }
+}
+
+void PlotWidget::renderLossCurvePlot() {
+    LOG_DEBUG("Rendering loss curve plot with " + std::to_string(epochs.size()) + 
+              " epochs, " + std::to_string(trainLoss.size()) + " training loss points, and " + 
+              std::to_string(validLoss.size()) + " validation loss points", "PlotWidget");
+    
+    try {
+        if (ImPlot::BeginPlot(title.c_str(), ImVec2(-1, -1))) {
+            ImPlot::SetupAxes(xLabel.c_str(), yLabel.c_str());
+            
+            // Add training loss line
+            ImPlot::PlotLine("Training Loss", 
+                           epochs.data(), 
+                           trainLoss.data(), 
+                           static_cast<int>(epochs.size()));
+            
+            // Add validation loss line
+            if (!validLoss.empty()) {
+                ImPlot::PlotLine("Validation Loss", 
+                               epochs.data(), 
+                               validLoss.data(), 
+                               static_cast<int>(epochs.size()));
+            }
+            
+            ImPlot::EndPlot();
+            LOG_DEBUG("Loss curve plot rendering completed", "PlotWidget");
+        } else {
+            LOG_ERR("Failed to begin loss curve plot", "PlotWidget");
+        }
+    }
+    catch (const std::exception& e) {
+        LOG_ERR("Exception during loss curve plot rendering: " + std::string(e.what()), "PlotWidget");
+        throw;
     }
 } 

@@ -1,207 +1,202 @@
 #include "gui/PlotNavigator.h"
+#include "gui/PlotWidget.h"
 #include "utils/Logger.h"
-#include <FL/fl_ask.H>
 #include <algorithm>
 #include <filesystem>
 
-// PlotNavigator implementation
-PlotNavigator::PlotNavigator(int x, int y, int w, int h)
-    : Fl_Group(x, y, w, h), currentPlotIndex(0)
-{
-    box(FL_DOWN_BOX);
-    color(FL_WHITE);
+// Define the LOG_WARNING macro if it's not available
+#ifndef LOG_WARNING
+#define LOG_WARNING(message, component) std::cerr << "[WARNING][" << component << "] " << message << std::endl
+#endif
 
-    // Create navigation buttons at the bottom
-    int buttonWidth = 30;
-    int buttonHeight = 25;
-    int buttonY = y + h - buttonHeight - 5;
-    
-    prevButton = new Fl_Button(x + 5, buttonY, buttonWidth, buttonHeight, "@<");
-    prevButton->callback(prevButtonCallback, this);
-    
-    nextButton = new Fl_Button(x + w - buttonWidth - 5, buttonY, buttonWidth, buttonHeight, "@>");
-    nextButton->callback(nextButtonCallback, this);
-    
-    // Create plot label
-    plotLabel = new Fl_Box(x + buttonWidth + 10, buttonY, w - 2*buttonWidth - 20, buttonHeight);
-    plotLabel->align(FL_ALIGN_CENTER | FL_ALIGN_INSIDE);
-    
-    end();
-    updateNavigationButtons();
+// PlotNavigator implementation
+PlotNavigator::PlotNavigator() 
+    : currentPlotIndex(0), numPlots(0) {
+    LOG_INFO("PlotNavigator initialized", "PlotNavigator");
 }
 
-PlotNavigator::~PlotNavigator()
-{
+PlotNavigator::~PlotNavigator() {
     clearPlots();
 }
 
-void PlotNavigator::createPlot(const std::shared_ptr<DataFrame>& data,
-                       const std::shared_ptr<Model>& model,
-                       const std::string& plotType,
-                       const std::string& title)
-{
-    // Define a logging macro if not available
-    #ifndef LOG_INFO
-    #define LOG_INFO(message, component) std::cout << "[INFO][" << component << "] " << message << std::endl
-    #endif
+void PlotNavigator::createPlot(PlotWidget::PlotType plotType, const std::string& title,
+                             const std::vector<double>& xValues, 
+                             const std::vector<double>& yValues) {
+    LOG_INFO("Creating plot: " + title, "PlotNavigator");
     
-    LOG_INFO("Creating plot of type: " + plotType, "PlotNavigator");
-    
-    // Initialize plot widget with proper dimensions
-    int plotX = x() + 5;
-    int plotY = y() + 5;
-    int plotW = w() - 10;
-    int plotH = h() - 40;  // Leave space for navigation buttons
-    
-    PlotWidget* plot = new PlotWidget(plotX, plotY, plotW, plotH);
-    plots.push_back(plot);
-    
-    // Variables to hold the temp file paths
-    std::string tempDataPath, tempImagePath, tempScriptPath;
-    
-    // Create the appropriate plot based on type
-    if (plotType == "scatter") {
-        // Create temporary files with proper paths
-        plot->createTempFilePaths("scatter", tempDataPath, tempImagePath, tempScriptPath);
+    if (plotType == PlotWidget::PlotType::SCATTER) {
+        LOG_INFO("Creating scatter plot with " + std::to_string(xValues.size()) + " points", "PlotNavigator");
         
-        // Load the data for the plot
-        std::vector<double> actual = data->getColumn(model->getTargetName());
-        Eigen::MatrixXd X = data->toMatrix(model->getVariableNames());
-        Eigen::VectorXd predicted = model->predict(X);
-        std::vector<double> predictedVec(predicted.data(), predicted.data() + predicted.size());
+        if (xValues.size() != yValues.size()) {
+            LOG_WARNING("X and Y data must have the same size for scatter plots", "PlotNavigator");
+            return;
+        }
         
-        LOG_INFO("Scatter plot data size - Actual: " + std::to_string(actual.size()) + 
-                 ", Predicted: " + std::to_string(predictedVec.size()), "PlotNavigator");
-        
-        plot->createScatterPlot(actual, predictedVec, "Actual Values", "Predicted Values", title,
-                               tempDataPath, tempImagePath, tempScriptPath);
+        std::unique_ptr<PlotWidget> plot = std::make_unique<PlotWidget>();
+        plot->setTitle(title);
+        plot->createScatterPlot(xValues, yValues, "Actual", "Predicted");
+        plots.push_back(std::move(plot));
     }
-    else if (plotType == "timeseries") {
-        // Create temporary files with proper paths
-        plot->createTempFilePaths("timeseries", tempDataPath, tempImagePath, tempScriptPath);
+    else if (plotType == PlotWidget::PlotType::TIME_SERIES) {
+        LOG_INFO("Creating time series plot with " + std::to_string(xValues.size()) + " points", "PlotNavigator");
         
-        // Load the data for the plot
-        std::vector<double> actual = data->getColumn(model->getTargetName());
-        Eigen::MatrixXd X = data->toMatrix(model->getVariableNames());
-        Eigen::VectorXd predicted = model->predict(X);
-        std::vector<double> predictedVec(predicted.data(), predicted.data() + predicted.size());
+        if (xValues.size() != yValues.size()) {
+            LOG_WARNING("Actual and predicted data must have the same size for time series plots", "PlotNavigator");
+            return;
+        }
         
-        LOG_INFO("Time series plot data size - Actual: " + std::to_string(actual.size()) + 
-                 ", Predicted: " + std::to_string(predictedVec.size()), "PlotNavigator");
-        
-        plot->createTimeseriesPlot(actual, predictedVec, title,
-                                  tempDataPath, tempImagePath, tempScriptPath);
+        std::unique_ptr<PlotWidget> plot = std::make_unique<PlotWidget>();
+        plot->setTitle(title);
+        plot->createTimeSeriesPlot(xValues, yValues);
+        plots.push_back(std::move(plot));
     }
-    else if (plotType == "importance") {
-        // Create temporary files with proper paths
-        plot->createTempFilePaths("importance", tempDataPath, tempImagePath, tempScriptPath);
+    else if (plotType == PlotWidget::PlotType::RESIDUAL) {
+        LOG_INFO("Creating residual plot with " + std::to_string(xValues.size()) + " points", "PlotNavigator");
         
-        // Load feature importance data
-        std::unordered_map<std::string, double> importance = model->getFeatureImportance();
+        if (xValues.size() != yValues.size()) {
+            LOG_WARNING("Predicted and residual data must have the same size", "PlotNavigator");
+            return;
+        }
         
-        LOG_INFO("Feature importance plot with " + std::to_string(importance.size()) + " features", "PlotNavigator");
-        
-        plot->createImportancePlot(importance, title, tempDataPath, tempImagePath, tempScriptPath);
-    }
-    else if (plotType == "residual") {
-        // Create temporary files with proper paths
-        plot->createTempFilePaths("residual", tempDataPath, tempImagePath, tempScriptPath);
-        
-        // Load the data for the plot
-        std::vector<double> actual = data->getColumn(model->getTargetName());
-        Eigen::MatrixXd X = data->toMatrix(model->getVariableNames());
-        Eigen::VectorXd predicted = model->predict(X);
-        std::vector<double> predictedVec(predicted.data(), predicted.data() + predicted.size());
-        
-        LOG_INFO("Residual plot data size - Actual: " + std::to_string(actual.size()) + 
-                 ", Predicted: " + std::to_string(predictedVec.size()), "PlotNavigator");
-        
-        plot->createResidualPlot(actual, predictedVec, title,
-                                tempDataPath, tempImagePath, tempScriptPath);
+        std::unique_ptr<PlotWidget> plot = std::make_unique<PlotWidget>();
+        plot->setTitle(title);
+        plot->createResidualPlot(xValues, yValues);
+        plots.push_back(std::move(plot));
     }
     
-    // Update plot navigator
-    add(plot);
-    plot->hide();  // Hide initially, will be shown based on currentPlotIndex
-    currentPlotIndex = plots.size() - 1;
-    updateVisibility();
-    updateNavigationButtons();
-    
-    LOG_INFO("Plot creation completed", "PlotNavigator");
+    updatePlotCount();
 }
 
-void PlotNavigator::nextPlot()
-{
+void PlotNavigator::createPlot(PlotWidget::PlotType plotType, const std::string& title,
+                             const std::unordered_map<std::string, double>& values) {
+    LOG_INFO("Creating feature importance plot with " + std::to_string(values.size()) + " features", "PlotNavigator");
+    
+    if (values.empty()) {
+        LOG_WARNING("Cannot create importance plot with empty data", "PlotNavigator");
+        return;
+    }
+    
+    std::unique_ptr<PlotWidget> plot = std::make_unique<PlotWidget>();
+    plot->setTitle(title);
+    plot->createImportancePlot(values);
+    plots.push_back(std::move(plot));
+    
+    updatePlotCount();
+}
+
+void PlotNavigator::createPlot(PlotWidget::PlotType plotType, const std::string& title,
+                             const std::vector<double>& xValues, 
+                             const std::vector<double>& yValues,
+                             const std::vector<double>& y2Values) {
+    LOG_INFO("Creating learning curve or loss curve plot", "PlotNavigator");
+    
+    if (xValues.empty() || yValues.empty()) {
+        LOG_WARNING("Cannot create plot with empty data", "PlotNavigator");
+        return;
+    }
+    
+    if (xValues.size() != yValues.size() || 
+        (!y2Values.empty() && xValues.size() != y2Values.size())) {
+        LOG_WARNING("Data arrays must have the same size", "PlotNavigator");
+        return;
+    }
+    
+    std::unique_ptr<PlotWidget> plot = std::make_unique<PlotWidget>();
+    plot->setTitle(title);
+    
+    if (plotType == PlotWidget::PlotType::LEARNING_CURVE) {
+        plot->createLearningCurvePlot(xValues, yValues, y2Values);
+    }
+    else if (plotType == PlotWidget::PlotType::LOSS_CURVE) {
+        plot->createLossCurvePlot(xValues, yValues, y2Values);
+    }
+    
+    plots.push_back(std::move(plot));
+    updatePlotCount();
+}
+
+void PlotNavigator::showPlot(size_t index) {
+    if (index < plots.size()) {
+        currentPlotIndex = index;
+    }
+}
+
+bool PlotNavigator::nextPlot() {
+    if (plots.empty()) return false;
+    
     if (currentPlotIndex < plots.size() - 1) {
         currentPlotIndex++;
-        updateVisibility();
-        updateNavigationButtons();
+        return true;
     }
+    return false;
 }
 
-void PlotNavigator::prevPlot()
-{
+bool PlotNavigator::previousPlot() {
+    if (plots.empty()) return false;
+    
     if (currentPlotIndex > 0) {
         currentPlotIndex--;
-        updateVisibility();
-        updateNavigationButtons();
+        return true;
     }
+    return false;
 }
 
-void PlotNavigator::clearPlots()
-{
-    for (auto plot : plots) {
-        remove(plot);
-        delete plot;
-    }
+void PlotNavigator::clearPlots() {
     plots.clear();
     currentPlotIndex = 0;
-    updateNavigationButtons();
+    updatePlotCount();
+    LOG_INFO("All plots cleared", "PlotNavigator");
 }
 
-void PlotNavigator::prevButtonCallback(Fl_Widget*, void* v)
-{
-    ((PlotNavigator*)v)->prevPlot();
+size_t PlotNavigator::getPlotCount() const {
+    return plots.size();
 }
 
-void PlotNavigator::nextButtonCallback(Fl_Widget*, void* v)
-{
-    ((PlotNavigator*)v)->nextPlot();
-}
-
-void PlotNavigator::updateVisibility()
-{
-    for (size_t i = 0; i < plots.size(); i++) {
-        if (i == currentPlotIndex) {
-            plots[i]->show();
-        } else {
-            plots[i]->hide();
+void PlotNavigator::render() {
+    if (plots.empty()) {
+        ImGui::TextWrapped("No plots available. Create a model first.");
+        return;
+    }
+    
+    // Navigation buttons
+    ImGui::BeginGroup();
+    
+    // Only show navigation if we have multiple plots
+    if (plots.size() > 1) {
+        ImGui::Text("Plot %zu of %zu:", currentPlotIndex + 1, plots.size());
+        
+        ImGui::SameLine(ImGui::GetWindowWidth() - 200);
+        
+        if (ImGui::Button("Previous")) {
+            previousPlot();
+        }
+        
+        ImGui::SameLine();
+        
+        if (ImGui::Button("Next")) {
+            nextPlot();
+        }
+        
+        ImGui::Separator();
+    }
+    
+    // Render the current plot
+    if (currentPlotIndex < plots.size()) {
+        plots[currentPlotIndex]->render();
+        
+        // Plot export options
+        ImGui::Separator();
+        
+        if (ImGui::Button("Save Plot Image")) {
+            plots[currentPlotIndex]->savePlotToFile();
         }
     }
     
-    // Update plot label
-    if (!plots.empty()) {
-        char label[32];
-        snprintf(label, sizeof(label), "Plot %zu of %zu", currentPlotIndex + 1, plots.size());
-        plotLabel->copy_label(label);
-    } else {
-        plotLabel->copy_label("No plots available");
-    }
-    
-    redraw();
+    ImGui::EndGroup();
 }
 
-void PlotNavigator::updateNavigationButtons()
-{
-    prevButton->activate();
-    nextButton->activate();
-    
-    if (plots.empty() || currentPlotIndex == 0) {
-        prevButton->deactivate();
-    }
-    if (plots.empty() || currentPlotIndex == plots.size() - 1) {
-        nextButton->deactivate();
-    }
+void PlotNavigator::updatePlotCount() {
+    numPlots = plots.size();
 }
 
 bool PlotNavigator::savePlotToFile(size_t index, const std::string& filename) {
@@ -214,12 +209,11 @@ bool PlotNavigator::savePlotToFile(size_t index, const std::string& filename) {
         std::filesystem::path filePath(filename);
         std::filesystem::create_directories(filePath.parent_path());
 
-        // Save the plot using matplotlib's savefig
-        plots[index]->savePlot(filename);
-        return true;
+        // Use the plot widget's save function
+        return plots[index]->savePlotToFile(filename);
     }
     catch (const std::exception& e) {
-        fl_alert("Failed to save plot: %s", e.what());
+        LOG_WARNING("Failed to save plot: " + std::string(e.what()), "PlotNavigator");
         return false;
     }
 } 

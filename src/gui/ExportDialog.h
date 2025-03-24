@@ -41,6 +41,7 @@ public:
         }
     };
 
+    ExportDialog();
     ExportDialog(int w, int h, const char* title);
     ~ExportDialog();
 
@@ -57,6 +58,7 @@ private:
 
     void createDirectory();
     std::string generateExportPath() const;
+    void initialize();
 
     // UI Elements
     Fl_Check_Button* scatterPlotCheck;

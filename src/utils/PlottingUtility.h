@@ -9,6 +9,13 @@
 #include <cstdlib>
 #include <chrono>
 #include <algorithm>  // Add algorithm before Windows.h
+#include <unordered_map>
+#include <FL/Fl_Widget.H>
+
+// ImGui headers
+#include "imgui.h"
+#include "../backends/imgui_impl_fltk.h"
+#include "../backends/imgui_impl_opengl3.h"
 
 // Prevent Windows from defining min/max macros
 #define NOMINMAX
@@ -20,451 +27,229 @@
 
 namespace fs = std::filesystem;
 
+// Forward declaration
+class Fl_Widget;
+
 /**
- * @brief Utility class for generating plots using Python
+ * @brief C++ plotting utility using ImGui for direct rendering
  */
 class PlottingUtility {
 public:
     /**
-     * @brief Generate a regression plot using the Python script
-     * 
-     * @param data DataFrame containing the original data
-     * @param predictions Vector of predicted values
-     * @param xColumn Name of the X column
-     * @param yColumn Name of the Y column
+     * @brief Get the singleton instance
+     * @return Reference to the singleton instance
+     */
+    static PlottingUtility& getInstance();
+    
+    /**
+     * @brief Initialize the plotting utility with a parent widget
+     * @param parentWidget The parent widget to render within
+     */
+    void initialize(Fl_Widget* parentWidget);
+    
+    /**
+     * @brief Clean up plotting utility resources
+     */
+    void cleanup();
+    
+    /**
+     * @brief Create a scatter plot
+     * @param actual Actual values
+     * @param predicted Predicted values
      * @param title Plot title
-     * @return std::string Path to the generated plot file, or empty string on failure
+     * @param xLabel X-axis label
+     * @param yLabel Y-axis label
+     * @param width Plot width
+     * @param height Plot height
      */
-    static std::string generateRegressionPlot(
-        const DataFrame& data,
-        const Eigen::VectorXd& predictions,
-        const std::string& xColumn,
-        const std::string& yColumn,
-        const std::string& title = "Linear Regression Results") 
-    {
-        try {
-            // Get Windows temp directory
-            char tempPath[MAX_PATH];
-            if (GetTempPathA(MAX_PATH, tempPath) == 0) {
-                std::cerr << "Error: Failed to get temp directory" << std::endl;
-                return "";
-            }
-
-            // Create a unique subdirectory for our temporary files
-            std::string uniqueDir = std::to_string(GetCurrentProcessId()) + "_" + 
-                                  std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-            fs::path tempDir = fs::path(tempPath) / "Model_Builder_Tool" / uniqueDir;
-            fs::create_directories(tempDir);
-            
-            // Create paths for temporary files
-            fs::path dataFile = tempDir / "data.csv";
-            fs::path modelFile = tempDir / "model.csv";
-            fs::path outputFile = tempDir / "regression_plot.png";
-            
-            // Save the original data to a CSV file
-            saveDataToCSV(data, dataFile.string());
-            
-            // Save the predictions to a CSV file
-            savePredictionsToCSV(data, predictions, xColumn, modelFile.string());
-            
-            // Get the script path
-            fs::path scriptPath = getPlottingScriptPath();
-            if (scriptPath.empty()) {
-                std::cerr << "Error: Could not find plotting script" << std::endl;
-                return "";
-            }
-            
-            // Build the command to run the Python script with proper path handling
-            std::stringstream cmd;
-            cmd << "python \"" << scriptPath.string() << "\"";
-            cmd << " --plot_type scatter";
-            cmd << " --data_file \"" << dataFile.string() << "\"";
-            cmd << " --model_file \"" << modelFile.string() << "\"";
-            cmd << " --output_file \"" << outputFile.string() << "\"";
-            cmd << " --x_column \"" << xColumn << "\"";
-            cmd << " --y_column \"" << yColumn << "\"";
-            cmd << " --title \"" << title << "\"";
-            
-            // Run the command
-            int result = std::system(cmd.str().c_str());
-            if (result != 0) {
-                std::cerr << "Error: Failed to run plotting script. Command: " << cmd.str() << std::endl;
-                return "";
-            }
-            
-            // Check if the output file was created
-            if (!fs::exists(outputFile)) {
-                std::cerr << "Error: Output file was not created: " << outputFile << std::endl;
-                return "";
-            }
-            
-            // Read the generated image
-            std::ifstream file(outputFile, std::ios::binary);
-            if (!file) {
-                std::cerr << "Error: Failed to read output file: " << outputFile << std::endl;
-                return "";
-            }
-            
-            std::stringstream buffer;
-            buffer << file.rdbuf();
-            file.close();
-            
-            // Clean up temporary files
-            try {
-                fs::remove_all(tempDir);
-            } catch (const fs::filesystem_error& e) {
-                std::cerr << "Warning: Failed to clean up temporary files: " << e.what() << std::endl;
-            }
-            
-            return buffer.str();
-        }
-        catch (const std::exception& e) {
-            std::cerr << "Error creating plot: " << e.what() << std::endl;
-            return "";
-        }
-    }
-
+    void createScatterPlot(
+        const std::vector<double>& actual,
+        const std::vector<double>& predicted,
+        const std::string& title,
+        const std::string& xLabel,
+        const std::string& yLabel,
+        int width = 0,
+        int height = 0
+    );
+    
     /**
-     * @brief Generate a feature importance plot
-     * 
-     * @param featureNames Vector of feature names
-     * @param importanceScores Vector of importance scores (same length as featureNames)
+     * @brief Create a time series plot
+     * @param actual Actual values
+     * @param predicted Predicted values
      * @param title Plot title
-     * @return std::string Path to the generated plot file, or empty string on failure
+     * @param width Plot width
+     * @param height Plot height
      */
-    static std::string generateImportancePlot(
-        const std::vector<std::string>& featureNames,
-        const std::vector<double>& importanceScores,
-        const std::string& title = "Feature Importance") 
-    {
-        try {
-            if (featureNames.size() != importanceScores.size() || featureNames.empty()) {
-                std::cerr << "Error: Feature names and importance scores must be the same length and non-empty" << std::endl;
-                return "";
-            }
-
-            // Get Windows temp directory
-            char tempPath[MAX_PATH];
-            if (GetTempPathA(MAX_PATH, tempPath) == 0) {
-                std::cerr << "Error: Failed to get temp directory" << std::endl;
-                return "";
-            }
-
-            // Create a unique subdirectory for our temporary files
-            std::string uniqueDir = std::to_string(GetCurrentProcessId()) + "_" + 
-                                    std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-            fs::path tempDir = fs::path(tempPath) / "Model_Builder_Tool" / uniqueDir;
-            fs::create_directories(tempDir);
-            
-            // Create paths for temporary files
-            fs::path dataFile = tempDir / "importance_data.csv";
-            fs::path outputFile = tempDir / "importance_plot.png";
-            
-            // Create a CSV file with feature names and importance scores
-            std::ofstream file(dataFile);
-            if (!file.is_open()) {
-                std::cerr << "Error: Could not open file for writing: " << dataFile << std::endl;
-                return "";
-            }
-            
-            // Write the header
-            file << "feature,importance" << std::endl;
-            
-            // Write the data
-            for (size_t i = 0; i < featureNames.size(); ++i) {
-                file << featureNames[i] << "," << importanceScores[i] << std::endl;
-            }
-            
-            file.close();
-            
-            // Get the script path
-            fs::path scriptPath = getPlottingScriptPath();
-            if (scriptPath.empty()) {
-                std::cerr << "Error: Could not find plotting script" << std::endl;
-                return "";
-            }
-            
-            // Build the command to run the Python script
-            std::stringstream cmd;
-            cmd << "python \"" << scriptPath.string() << "\"";
-            cmd << " --plot_type importance";
-            cmd << " --data_file \"" << dataFile.string() << "\"";
-            cmd << " --output_file \"" << outputFile.string() << "\"";
-            cmd << " --title \"" << title << "\"";
-            
-            // Run the command
-            int result = std::system(cmd.str().c_str());
-            if (result != 0) {
-                std::cerr << "Error: Failed to run plotting script. Command: " << cmd.str() << std::endl;
-                return "";
-            }
-            
-            // Check if the output file was created
-            if (!fs::exists(outputFile)) {
-                std::cerr << "Error: Output file was not created: " << outputFile << std::endl;
-                return "";
-            }
-            
-            // Read the generated image
-            std::ifstream imgFile(outputFile, std::ios::binary);
-            if (!imgFile) {
-                std::cerr << "Error: Failed to read output file: " << outputFile << std::endl;
-                return "";
-            }
-            
-            std::stringstream buffer;
-            buffer << imgFile.rdbuf();
-            imgFile.close();
-            
-            // Clean up temporary files
-            try {
-                fs::remove_all(tempDir);
-            } catch (const fs::filesystem_error& e) {
-                std::cerr << "Warning: Failed to clean up temporary files: " << e.what() << std::endl;
-            }
-            
-            return buffer.str();
-        }
-        catch (const std::exception& e) {
-            std::cerr << "Error creating importance plot: " << e.what() << std::endl;
-            return "";
-        }
-    }
-
+    void createTimeSeriesPlot(
+        const std::vector<double>& actual,
+        const std::vector<double>& predicted,
+        const std::string& title,
+        int width = 0,
+        int height = 0
+    );
+    
     /**
-     * @brief Generate a time series plot
-     * 
-     * @param actualValues Vector of actual values
-     * @param predictedValues Vector of predicted values
+     * @brief Create a residual plot
+     * @param predicted Predicted values
+     * @param residuals Residual values
      * @param title Plot title
-     * @return std::string Path to the generated plot file, or empty string on failure
+     * @param width Plot width
+     * @param height Plot height
      */
-    static std::string generateTimeseriesPlot(
-        const std::vector<double>& actualValues,
-        const std::vector<double>& predictedValues,
-        const std::string& title = "Time Series Comparison") 
-    {
-        try {
-            if (actualValues.empty() || predictedValues.empty()) {
-                std::cerr << "Error: Actual and predicted values must be non-empty" << std::endl;
-                return "";
-            }
-
-            // Get Windows temp directory
-            char tempPath[MAX_PATH];
-            if (GetTempPathA(MAX_PATH, tempPath) == 0) {
-                std::cerr << "Error: Failed to get temp directory" << std::endl;
-                return "";
-            }
-
-            // Create a unique subdirectory for our temporary files
-            std::string uniqueDir = std::to_string(GetCurrentProcessId()) + "_" + 
-                                    std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
-            fs::path tempDir = fs::path(tempPath) / "Model_Builder_Tool" / uniqueDir;
-            fs::create_directories(tempDir);
-            
-            // Create paths for temporary files
-            fs::path dataFile = tempDir / "timeseries_data.csv";
-            fs::path outputFile = tempDir / "timeseries_plot.png";
-            
-            // Create a CSV file with actual and predicted values
-            std::ofstream file(dataFile);
-            if (!file.is_open()) {
-                std::cerr << "Error: Could not open file for writing: " << dataFile << std::endl;
-                return "";
-            }
-            
-            // Write the header
-            file << "index,actual,predicted" << std::endl;
-            
-            // Write the data
-            size_t minSize = actualValues.size() < predictedValues.size() ? actualValues.size() : predictedValues.size();
-            for (size_t i = 0; i < minSize; ++i) {
-                file << i << "," << actualValues[i] << "," << predictedValues[i] << std::endl;
-            }
-            
-            file.close();
-            
-            // Get the script path
-            fs::path scriptPath = getPlottingScriptPath();
-            if (scriptPath.empty()) {
-                std::cerr << "Error: Could not find plotting script" << std::endl;
-                return "";
-            }
-            
-            // Build the command to run the Python script
-            std::stringstream cmd;
-            cmd << "python \"" << scriptPath.string() << "\"";
-            cmd << " --plot_type timeseries";
-            cmd << " --data_file \"" << dataFile.string() << "\"";
-            cmd << " --output_file \"" << outputFile.string() << "\"";
-            cmd << " --title \"" << title << "\"";
-            
-            // Run the command
-            int result = std::system(cmd.str().c_str());
-            if (result != 0) {
-                std::cerr << "Error: Failed to run plotting script. Command: " << cmd.str() << std::endl;
-                return "";
-            }
-            
-            // Check if the output file was created
-            if (!fs::exists(outputFile)) {
-                std::cerr << "Error: Output file was not created: " << outputFile << std::endl;
-                return "";
-            }
-            
-            // Read the generated image
-            std::ifstream imgFile(outputFile, std::ios::binary);
-            if (!imgFile) {
-                std::cerr << "Error: Failed to read output file: " << outputFile << std::endl;
-                return "";
-            }
-            
-            std::stringstream buffer;
-            buffer << imgFile.rdbuf();
-            imgFile.close();
-            
-            // Clean up temporary files
-            try {
-                fs::remove_all(tempDir);
-            } catch (const fs::filesystem_error& e) {
-                std::cerr << "Warning: Failed to clean up temporary files: " << e.what() << std::endl;
-            }
-            
-            return buffer.str();
-        }
-        catch (const std::exception& e) {
-            std::cerr << "Error creating timeseries plot: " << e.what() << std::endl;
-            return "";
-        }
-    }
-
+    void createResidualPlot(
+        const std::vector<double>& predicted,
+        const std::vector<double>& residuals,
+        const std::string& title,
+        int width = 0,
+        int height = 0
+    );
+    
     /**
-     * @brief Get the path to the plotting script
-     * 
-     * @return fs::path Path to the plotting script, or empty path if not found
+     * @brief Create a feature importance plot
+     * @param importance Map of feature names to importance values
+     * @param title Plot title
+     * @param width Plot width
+     * @param height Plot height
      */
-    static fs::path getPlottingScriptPath();
-
+    void createImportancePlot(
+        const std::unordered_map<std::string, double>& importance,
+        const std::string& title,
+        int width = 0,
+        int height = 0
+    );
+    
     /**
-     * @brief Format a file path for Python (replace backslashes with forward slashes)
-     * 
-     * @param path Original file path
-     * @return std::string Formatted file path
+     * @brief Create a learning curve plot
+     * @param trainingSizes Training set sizes
+     * @param trainingScores Training scores
+     * @param validationScores Validation scores
+     * @param title Plot title
+     * @param width Plot width
+     * @param height Plot height
      */
-    static std::string formatPathForPython(const std::string& path);
+    void createLearningCurvePlot(
+        const std::vector<double>& trainingSizes,
+        const std::vector<double>& trainingScores,
+        const std::vector<double>& validationScores,
+        const std::string& title,
+        int width = 0,
+        int height = 0
+    );
+    
+    /**
+     * @brief Render the current plot
+     */
+    void render();
+    
+    /**
+     * @brief Clear the current plot data
+     */
+    void clear();
 
 private:
-    /**
-     * @brief Save the DataFrame to a CSV file
-     * 
-     * @param data The DataFrame to save
-     * @param filePath Path to save the CSV file
-     * @return bool True if successful, false otherwise
-     */
-    static bool saveDataToCSV(const DataFrame& data, const std::string& filePath) {
-        try {
-            std::ofstream file(filePath);
-            if (!file.is_open()) {
-                std::cerr << "Error: Could not open file for writing: " << filePath << std::endl;
-                return false;
-            }
-            
-            // Write the header
-            for (size_t i = 0; i < data.getColumnNames().size(); ++i) {
-                file << data.getColumnNames()[i];
-                if (i < data.getColumnNames().size() - 1) {
-                    file << ",";
-                }
-            }
-            file << std::endl;
-            
-            // Write the data
-            for (int row = 0; row < data.getNumRows(); ++row) {
-                for (size_t col = 0; col < data.getColumnNames().size(); ++col) {
-                    file << data.getValue(row, col);
-                    if (col < data.getColumnNames().size() - 1) {
-                        file << ",";
-                    }
-                }
-                file << std::endl;
-            }
-            
-            file.close();
-            return true;
-        }
-        catch (const std::exception& e) {
-            std::cerr << "Error saving data to CSV: " << e.what() << std::endl;
-            return false;
-        }
-    }
+    // Parent widget to render within
+    Fl_Widget* parentWidget;
     
     /**
-     * @brief Save the predictions to a CSV file
-     * 
-     * @param data Original DataFrame (for x values)
-     * @param predictions Vector of predicted values
-     * @param xColumn Name of the X column
-     * @param filePath Path to save the CSV file
-     * @return bool True if successful, false otherwise
+     * @brief Set up the ImPlot style
      */
-    static bool savePredictionsToCSV(
-        const DataFrame& data,
-        const Eigen::VectorXd& predictions,
-        const std::string& xColumn,
-        const std::string& filePath) 
-    {
-        try {
-            std::ofstream file(filePath);
-            if (!file.is_open()) {
-                std::cerr << "Error: Could not open file for writing: " << filePath << std::endl;
-                return false;
-            }
-            
-            // Get the index of the x column
-            int xColIndex = data.getColumnIndex(xColumn);
-            if (xColIndex < 0) {
-                std::cerr << "Error: Column not found: " << xColumn << std::endl;
-                return false;
-            }
-            
-            // Write the header
-            file << xColumn << ",predicted" << std::endl;
-            
-            // Write the data
-            for (int row = 0; row < data.getNumRows(); ++row) {
-                file << data.getValue(row, xColIndex) << "," << predictions(row) << std::endl;
-            }
-            
-            file.close();
-            return true;
-        }
-        catch (const std::exception& e) {
-            std::cerr << "Error saving predictions to CSV: " << e.what() << std::endl;
-            return false;
-        }
-    }
+    void setupPlotStyle();
     
     /**
-     * @brief Get the directory of the executable
-     * 
-     * @return std::string Path to the executable directory
+     * @brief Render a plot window with the given title and dimensions
+     * @param title Plot title
+     * @param width Plot width (0 = use parent width)
+     * @param height Plot height (0 = use parent height)
+     * @return True if the window was created successfully, false otherwise
+     */
+    bool renderPlotWindow(const std::string& title, int width, int height);
+    
+    /**
+     * @brief Calculate plot dimensions based on the parent widget or provided values
+     * @param width Desired width (0 = use parent width)
+     * @param height Desired height (0 = use parent height)
+     * @return std::pair<int, int> Calculated width and height
+     */
+    std::pair<int, int> calculatePlotDimensions(int width, int height);
+    
+    /**
+     * @brief Render scatter plot using ImPlot
+     */
+    void renderScatterPlot();
+    
+    /**
+     * @brief Render time series plot using ImPlot
+     */
+    void renderTimeSeriesPlot();
+    
+    /**
+     * @brief Render residual plot using ImPlot
+     */
+    void renderResidualPlot();
+    
+    /**
+     * @brief Render feature importance plot using ImPlot
+     */
+    void renderImportancePlot();
+    
+    /**
+     * @brief Render learning curve plot using ImPlot
+     */
+    void renderLearningCurvePlot();
+    
+    /**
+     * @brief Data structure for storing plot data
+     */
+    struct PlotData {
+        enum class Type {
+            None,
+            Scatter,
+            TimeSeries,
+            Residual,
+            Importance,
+            LearningCurve
+        } type = Type::None;
+        
+        std::string title;
+        std::string xLabel;
+        std::string yLabel;
+        
+        std::vector<double> xValues;
+        std::vector<double> yValues;
+        std::vector<double> y2Values;
+        
+        std::unordered_map<std::string, double> importanceValues;
+        
+        std::vector<double> trainingSizes;
+        std::vector<double> trainingScores;
+        std::vector<double> validationScores;
+        
+        int width = 0;
+        int height = 0;
+    };
+    
+    // Current plot data
+    PlotData currentPlot;
+    
+    /**
+     * @brief Get the path to the application's executable directory
+     * @return std::string The executable directory path
      */
     static std::string getExecutableDir() {
         char buffer[MAX_PATH];
         GetModuleFileNameA(NULL, buffer, MAX_PATH);
-        return fs::path(buffer).parent_path().string();
+        std::string::size_type pos = std::string(buffer).find_last_of("\\/");
+        return std::string(buffer).substr(0, pos);
     }
     
     /**
-     * @brief Get the AppData directory
-     * 
-     * @return std::string Path to the AppData directory
+     * @brief Get the path to the application's data directory
+     * @return std::string The application data directory path
      */
     static std::string getAppDataDir() {
         char path[MAX_PATH];
         if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path))) {
-            return std::string(path);
+            return std::string(path) + "\\Model_Builder_Tool";
         }
         return "";
     }

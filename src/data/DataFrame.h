@@ -5,6 +5,9 @@
 #include <unordered_map>
 #include <Eigen/Dense>
 
+// Define feature vector type
+using FeatureVector = Eigen::MatrixXd;
+
 /**
  * @brief DataFrame class for storing and manipulating tabular data
  * 
@@ -112,8 +115,80 @@ public:
         return -1;
     }
 
+    /**
+     * @brief Get the feature names (all column names except target)
+     * 
+     * @return std::vector<std::string> Feature names
+     */
+    std::vector<std::string> getFeatureNames() const {
+        std::vector<std::string> features = getColumnNames();
+        // Remove target column if it exists and we know what it is
+        if (!targetColumn.empty()) {
+            features.erase(std::remove(features.begin(), features.end(), targetColumn), 
+                          features.end());
+        }
+        return features;
+    }
+
+    /**
+     * @brief Get the target column values
+     * 
+     * @return std::vector<double> Target column values
+     */
+    const std::vector<double>& getTargets() const {
+        if (!hasColumn(targetColumn)) {
+            throw std::runtime_error("Target column not set or does not exist");
+        }
+        return data.at(targetColumn);
+    }
+
+    /**
+     * @brief Set the target column name
+     * 
+     * @param name Target column name
+     */
+    void setTargetColumn(const std::string& name) {
+        if (!hasColumn(name)) {
+            throw std::runtime_error("Target column does not exist");
+        }
+        targetColumn = name;
+    }
+
+    /**
+     * @brief Get the target column name
+     * 
+     * @return std::string Target column name
+     */
+    std::string getTargetColumn() const {
+        return targetColumn;
+    }
+
+    /**
+     * @brief Get test samples as a matrix
+     * 
+     * @return FeatureVector Test samples
+     */
+    FeatureVector getTestSamples() const {
+        if (testSamples.size() == 0) {
+            // Return all samples if no test samples are defined
+            return toMatrix(getFeatureNames());
+        }
+        return testSamples;
+    }
+
+    /**
+     * @brief Set test samples
+     * 
+     * @param samples Test samples as a matrix
+     */
+    void setTestSamples(const FeatureVector& samples) {
+        testSamples = samples;
+    }
+
 private:
     std::unordered_map<std::string, std::vector<double>> data;
     std::vector<std::string> columnOrder;
     size_t rows = 0;
+    std::string targetColumn;
+    FeatureVector testSamples;
 };
