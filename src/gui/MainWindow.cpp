@@ -23,6 +23,7 @@
 
 // Include utilities
 #include "utils/Logger.h"
+#include "gui/ResultsView.h"
 
 // Define the menu items
 static Fl_Menu_Item menuItems[] = {
@@ -346,7 +347,8 @@ void MainWindow::configureResultsView() {
 }
 
 void MainWindow::handleModelFitted() {
-    // Nothing to do here, all handled in onModelSelected
+    // Configure the results view with the current model
+    configureResultsView();
 }
 
 void MainWindow::handleBackButton() {
