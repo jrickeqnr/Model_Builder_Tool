@@ -163,7 +163,7 @@ public:
      * @return std::shared_ptr<DataFrame> Pointer to the associated DataFrame
      */
     virtual std::shared_ptr<DataFrame> getDataFrame() const {
-        return nullptr;  // Default implementation
+        return dataFrame;  // Return the stored DataFrame
     }
 
     /**
@@ -172,7 +172,7 @@ public:
      * @param df Pointer to the DataFrame
      */
     virtual void setDataFrame(std::shared_ptr<DataFrame> df) {
-        // Default implementation does nothing
+        dataFrame = df;  // Store the DataFrame
     }
 
     /**
@@ -208,4 +208,7 @@ public:
         // By default, return true if getFeatureImportance() would return non-empty map
         return !getFeatureImportance().empty();
     }
+
+protected:
+    std::shared_ptr<DataFrame> dataFrame;  // Store the DataFrame associated with this model
 };

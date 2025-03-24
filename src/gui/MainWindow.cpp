@@ -223,6 +223,12 @@ void MainWindow::handleFileSelected(const std::string& filePath) {
         LOG_INFO("DataFrame created successfully with " + std::to_string(dataFrame->getNumRows()) + 
                  " rows and " + std::to_string(dataFrame->columnCount()) + " columns", "MainWindow");
         
+        // Log column names for debugging
+        LOG_DEBUG("DataFrame columns:", "MainWindow");
+        for (const auto& col : dataFrame->getColumnNames()) {
+            LOG_DEBUG("  - " + col, "MainWindow");
+        }
+        
         // Update status
         char statusMsg[256];
         snprintf(statusMsg, sizeof(statusMsg), "CSV file loaded successfully: %zu rows, %zu columns", 
@@ -284,18 +290,60 @@ void MainWindow::handleHyperparametersSelected(const std::unordered_map<std::str
 
 void MainWindow::handleVariablesSelected(const std::vector<std::string>& inputVariables, 
                                         const std::string& targetVariable) {
+    LOG_INFO("Variables selected - Input: " + std::to_string(inputVariables.size()) + 
+             " variables, Target: " + targetVariable, "MainWindow");
+    
+    // Log selected variables
+    LOG_DEBUG("Selected input variables:", "MainWindow");
+    for (const auto& var : inputVariables) {
+        LOG_DEBUG("  - " + var, "MainWindow");
+    }
+    LOG_DEBUG("Selected target variable: " + targetVariable, "MainWindow");
+    
     selectedInputVariables = inputVariables;
     selectedTargetVariable = targetVariable;
+    
+    // Verify DataFrame exists and has the selected columns
+    if (!dataFrame) {
+        LOG_ERR("No DataFrame available when variables are selected", "MainWindow");
+        fl_alert("No data available. Please select a file first.");
+        return;
+    }
+    
+    // Verify all selected columns exist in DataFrame
+    for (const auto& var : inputVariables) {
+        if (!dataFrame->hasColumn(var)) {
+            LOG_ERR("Selected input variable not found in DataFrame: " + var, "MainWindow");
+            fl_alert("Selected variable '%s' not found in data", var.c_str());
+            return;
+        }
+    }
+    
+    if (!dataFrame->hasColumn(targetVariable)) {
+        LOG_ERR("Selected target variable not found in DataFrame: " + targetVariable, "MainWindow");
+        fl_alert("Selected target variable '%s' not found in data", targetVariable.c_str());
+        return;
+    }
     
     // Create model
     model = createModel(currentModelType);
     if (!model) {
+        LOG_ERR("Failed to create model", "MainWindow");
         fl_alert("Failed to create model");
         return;
     }
     
-    // Set the DataFrame on the model before fitting
+    LOG_INFO("Setting DataFrame on model", "MainWindow");
     model->setDataFrame(dataFrame);
+    
+    // Verify DataFrame was set correctly
+    auto modelDataFrame = model->getDataFrame();
+    if (!modelDataFrame) {
+        LOG_ERR("DataFrame not properly set on model", "MainWindow");
+        fl_alert("Failed to associate data with model");
+        return;
+    }
+    LOG_INFO("DataFrame successfully set on model", "MainWindow");
     
     // Update status message with model type and hyperparameters if any
     std::string statusMsg = "Using " + currentModelType;

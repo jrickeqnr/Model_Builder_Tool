@@ -258,64 +258,33 @@ void ResultsView::drawFallbackPlotDisplay() {
 }
 
 void ResultsView::setModel(std::shared_ptr<Model> newModel) {
+    LOG_INFO("Setting new model in ResultsView", "ResultsView");
+    
     if (!newModel) {
-        LOG_WARN("Attempted to set null model", "ResultsView");
+        LOG_ERR("Attempted to set null model", "ResultsView");
         return;
     }
     
-    LOG_INFO("Setting model: " + newModel->getName(), "ResultsView");
     model = newModel;
     
-    // Get DataFrame from model
-    if (model) {
-        dataFrame = model->getDataFrame();
-        if (dataFrame) {
-            LOG_INFO("Got DataFrame with " + std::to_string(dataFrame->getNumRows()) + 
-                     " rows and " + std::to_string(dataFrame->columnCount()) + " columns", "ResultsView");
-        } else {
-            LOG_WARN("Model has no associated DataFrame", "ResultsView");
-        }
-        
-        // Update displays
-        LOG_DEBUG("Updating statistics display", "ResultsView");
-        updateStatisticsDisplay();
-        
-        LOG_DEBUG("Updating parameters display", "ResultsView");
-        updateParametersDisplay();
-        
-        // Ensure PlottingUtility is initialized before creating plots
-        if (!plottingInitialized && plotsPanel) {
-            LOG_INFO("Initializing PlottingUtility", "ResultsView");
-            try {
-                PlottingUtility::getInstance().initialize(plotsPanel);
-                plottingInitialized = true;
-                LOG_INFO("PlottingUtility initialized successfully", "ResultsView");
-            } catch (const std::exception& e) {
-                LOG_ERR("Failed to initialize PlottingUtility: " + std::string(e.what()), "ResultsView");
-                drawFallbackPlotDisplay();
-                return;
-            } catch (...) {
-                LOG_ERR("Unknown error initializing PlottingUtility", "ResultsView");
-                drawFallbackPlotDisplay();
-                return;
-            }
-        }
-        
-        // Create plots for the model
-        LOG_DEBUG("Creating plots", "ResultsView");
-        try {
-            createPlots();
-            LOG_INFO("Plots created successfully", "ResultsView");
-        } catch (const std::exception& e) {
-            LOG_ERR("Error creating plots: " + std::string(e.what()), "ResultsView");
-            drawFallbackPlotDisplay();
-        } catch (...) {
-            LOG_ERR("Unknown error creating plots", "ResultsView");
-            drawFallbackPlotDisplay();
-        }
-        
-        LOG_INFO("Model set successfully", "ResultsView");
+    // Get the DataFrame from the model
+    dataFrame = model->getDataFrame();
+    if (!dataFrame) {
+        LOG_ERR("Model does not have a DataFrame set", "ResultsView");
+        return;
     }
+    LOG_INFO("Successfully retrieved DataFrame from model with " + 
+             std::to_string(dataFrame->getNumRows()) + " rows and " +
+             std::to_string(dataFrame->columnCount()) + " columns", "ResultsView");
+    
+    // Update displays
+    updateStatisticsDisplay();
+    updateParametersDisplay();
+    
+    // Force a layout update to create plots
+    layout();
+    
+    LOG_INFO("Model set successfully in ResultsView", "ResultsView");
 }
 
 void ResultsView::onModelComparisonSelected(const std::vector<std::shared_ptr<Model>>& models) {
@@ -339,265 +308,127 @@ void ResultsView::onModelComparisonSelected(const std::vector<std::shared_ptr<Mo
 }
 
 void ResultsView::updateStatisticsDisplay() {
-    if (!model) {
-        LOG_WARN("Cannot update statistics display: no model", "ResultsView");
+    LOG_INFO("Updating statistics display", "ResultsView");
+    
+    if (!model || !statisticsBuffer) {
+        LOG_ERR("Cannot update statistics: model or buffer is null", "ResultsView");
         return;
     }
     
-    if (!statisticsBuffer) {
-        LOG_ERR("Cannot update statistics display: no buffer", "ResultsView");
-        return;
+    try {
+        std::stringstream ss;
+        auto statistics = model->getStatistics();
+        
+        // Format statistics nicely
+        ss << "Model Type: " << model->getName() << "\n\n";
+        
+        for (const auto& [key, value] : statistics) {
+            ss << key << ": " << std::fixed << std::setprecision(4) << value << "\n";
+        }
+        
+        statisticsBuffer->text(ss.str().c_str());
+        LOG_INFO("Statistics display updated successfully", "ResultsView");
+    } catch (const std::exception& e) {
+        LOG_ERR("Error updating statistics display: " + std::string(e.what()), "ResultsView");
     }
-    
-    LOG_DEBUG("Updating statistics display for model: " + model->getName(), "ResultsView");
-    
-    std::stringstream ss;
-    
-    // Get statistics from the model
-    auto statistics = model->getStatistics();
-    
-    // Format the statistics with labels
-    ss << "Model Type: " << model->getName() << "\n\n";
-    
-    // Add metrics based on what's available
-    if (statistics.count("r_squared")) {
-        ss << "R² Score: " << std::fixed << std::setprecision(4) << statistics["r_squared"] << "\n";
-    }
-    
-    if (statistics.count("adjusted_r_squared")) {
-        ss << "Adjusted R²: " << std::fixed << std::setprecision(4) << statistics["adjusted_r_squared"] << "\n";
-    }
-    
-    if (statistics.count("rmse")) {
-        ss << "Root Mean Squared Error (RMSE): " << std::fixed << std::setprecision(4) << statistics["rmse"] << "\n";
-    }
-    
-    if (statistics.count("mae")) {
-        ss << "Mean Absolute Error (MAE): " << std::fixed << std::setprecision(4) << statistics["mae"] << "\n";
-    }
-    
-    if (statistics.count("n_samples")) {
-        ss << "Number of Samples: " << static_cast<int>(statistics["n_samples"]) << "\n";
-    }
-    
-    if (statistics.count("n_features")) {
-        ss << "Number of Features: " << static_cast<int>(statistics["n_features"]) << "\n";
-    }
-    
-    // Set the text
-    statisticsBuffer->text(ss.str().c_str());
-    
-    LOG_DEBUG("Statistics display updated", "ResultsView");
 }
 
 void ResultsView::updateParametersDisplay() {
-    if (!model) {
-        LOG_WARN("Cannot update parameters display: no model", "ResultsView");
+    LOG_INFO("Updating parameters display", "ResultsView");
+    
+    if (!model || !parametersBuffer) {
+        LOG_ERR("Cannot update parameters: model or buffer is null", "ResultsView");
         return;
     }
     
-    if (!parametersBuffer) {
-        LOG_ERR("Cannot update parameters display: no buffer", "ResultsView");
-        return;
+    try {
+        std::stringstream ss;
+        auto parameters = model->getParameters();
+        
+        // Format parameters nicely
+        ss << "Model Parameters:\n\n";
+        
+        for (const auto& [key, value] : parameters) {
+            ss << key << ": " << value << "\n";
+        }
+        
+        // Add feature information
+        ss << "\nFeatures:\n";
+        for (const auto& feature : model->getVariableNames()) {
+            ss << "- " << feature << "\n";
+        }
+        
+        ss << "\nTarget Variable: " << model->getTargetName() << "\n";
+        
+        parametersBuffer->text(ss.str().c_str());
+        LOG_INFO("Parameters display updated successfully", "ResultsView");
+    } catch (const std::exception& e) {
+        LOG_ERR("Error updating parameters display: " + std::string(e.what()), "ResultsView");
     }
-    
-    LOG_DEBUG("Updating parameters display for model: " + model->getName(), "ResultsView");
-    
-    std::stringstream ss;
-    
-    // Get parameters from the model
-    auto params = model->getParameters();
-    
-    ss << "Model Parameters:\n\n";
-    
-    // Special handling for linear regression - using model's type name instead of enum value
-    if (model->getName() == "Linear Regression") {
-        // Check if we have an intercept in the parameters
-        double intercept = 0.0;
-        if (params.count("intercept")) {
-            intercept = params["intercept"];
-        }
-        
-        // Add intercept
-        ss << "Intercept: " << std::fixed << std::setprecision(4) << intercept << "\n\n";
-        
-        // Add coefficients
-        ss << "Coefficients:\n";
-        
-        // Get variable names from model
-        auto variableNames = model->getVariableNames();
-        
-        // Match variable names to parameter values
-        for (const auto& varName : variableNames) {
-            if (params.count(varName)) {
-                ss << varName << ": " << std::fixed << std::setprecision(4) << params[varName] << "\n";
-            }
-        }
-    } else {
-        // For other model types, just show parameters in name:value format
-        for (const auto& param : params) {
-            ss << param.first << ": " << std::fixed << std::setprecision(4) << param.second << "\n";
-        }
-    }
-    
-    // Set the text
-    parametersBuffer->text(ss.str().c_str());
-    
-    LOG_DEBUG("Parameters display updated", "ResultsView");
 }
 
 void ResultsView::createPlots() {
-    LOG_INFO("Creating plots for model: " + (model ? model->getName() : "null"), "ResultsView");
+    LOG_INFO("Creating plots for model", "ResultsView");
     
-    if (!model) {
-        LOG_ERR("No model available for plotting", "ResultsView");
+    if (!model || !dataFrame) {
+        LOG_ERR("Cannot create plots: model or DataFrame is null", "ResultsView");
         return;
     }
     
     if (!plottingInitialized) {
-        LOG_ERR("PlottingUtility not initialized", "ResultsView");
+        LOG_ERR("Cannot create plots: PlottingUtility not initialized", "ResultsView");
         return;
     }
     
-    // Get model data for plotting
-    LOG_DEBUG("Getting model data for plots", "ResultsView");
-    
     try {
         // Get actual and predicted values
-        auto statistics = model->getStatistics();
-        auto parameters = model->getParameters();
+        std::vector<double> actual = dataFrame->getColumn(model->getTargetName());
+        std::vector<double> predicted;
+        Eigen::VectorXd predictedEigen = model->predict(dataFrame->toMatrix(model->getVariableNames()));
+        predicted.resize(predictedEigen.size());
+        Eigen::VectorXd::Map(&predicted[0], predictedEigen.size()) = predictedEigen;
         
-        // Need to get the data differently for each model
-        if (!dataFrame) {
-            LOG_ERR("No DataFrame available for plotting", "ResultsView");
-            return;
-        }
+        LOG_INFO("Creating plots with " + std::to_string(actual.size()) + " data points", "ResultsView");
         
-        // Get target values (actual)
-        std::vector<double> actual;
-        std::string targetColumn = model->getTargetName();
+        // Create scatter plot of actual vs predicted values
+        PlottingUtility::getInstance().createScatterPlot(
+            actual, predicted,
+            "Actual vs Predicted Values",
+            "Actual Values",
+            "Predicted Values"
+        );
         
-        if (dataFrame->hasColumn(targetColumn)) {
-            actual = dataFrame->getColumn(targetColumn);
-            LOG_DEBUG("Retrieved " + std::to_string(actual.size()) + " actual values", "ResultsView");
-        } else {
-            LOG_ERR("Target column not found in DataFrame", "ResultsView");
-            return;
-        }
+        // Create time series plot
+        PlottingUtility::getInstance().createTimeSeriesPlot(
+            actual, predicted,
+            "Time Series Plot"
+        );
         
-        // Get predictions by letting the model predict on its training data
-        auto featureNames = model->getVariableNames();
-        Eigen::MatrixXd X = dataFrame->toMatrix(featureNames);
-        Eigen::VectorXd predictions = model->predict(X);
-        
-        std::vector<double> predicted(predictions.data(), predictions.data() + predictions.size());
-        LOG_DEBUG("Retrieved " + std::to_string(predicted.size()) + " predicted values", "ResultsView");
-        
-        if (actual.empty() || predicted.empty()) {
-            LOG_ERR("Empty actual or predicted values", "ResultsView");
-            return;
-        }
-        
-        // Ensure equal sizes (in case of any mismatch)
-        size_t minSize = std::min(actual.size(), predicted.size());
-        if (actual.size() != predicted.size()) {
-            LOG_WARN("Size mismatch between actual and predicted values, truncating to " + 
-                    std::to_string(minSize), "ResultsView");
-            actual.resize(minSize);
-            predicted.resize(minSize);
-        }
-        
-        // Create scatter plot for actual vs predicted
-        LOG_INFO("Creating scatter plot", "ResultsView");
-        try {
-            PlottingUtility::getInstance().createScatterPlot(
-                actual, 
-                predicted,
-                "Actual vs Predicted Values",
-                "Actual", 
-                "Predicted"
-            );
-            LOG_INFO("Rendering scatter plot", "ResultsView");
-            PlottingUtility::getInstance().render();
-        } catch (const std::exception& e) {
-            LOG_ERR("Failed to create or render scatter plot: " + std::string(e.what()), "ResultsView");
-        } catch (...) {
-            LOG_ERR("Unknown error creating or rendering scatter plot", "ResultsView");
-        }
-        
-        // Only create time series plot if we have enough data points
-        if (actual.size() > 2) {
-            LOG_INFO("Creating time series plot", "ResultsView");
-            try {
-                PlottingUtility::getInstance().createTimeSeriesPlot(
-                    actual,
-                    predicted,
-                    "Actual vs Predicted Over Time"
-                );
-                LOG_INFO("Rendering time series plot", "ResultsView");
-                PlottingUtility::getInstance().render();
-            } catch (const std::exception& e) {
-                LOG_ERR("Failed to create or render time series plot: " + std::string(e.what()), "ResultsView");
-            } catch (...) {
-                LOG_ERR("Unknown error creating or rendering time series plot", "ResultsView");
-            }
-        } else {
-            LOG_WARN("Not enough data points for time series plot", "ResultsView");
-        }
-        
-        // Calculate residuals
-        LOG_DEBUG("Calculating residuals", "ResultsView");
+        // Calculate and create residual plot
         std::vector<double> residuals;
-        for (size_t i = 0; i < actual.size() && i < predicted.size(); ++i) {
+        residuals.reserve(actual.size());
+        for (size_t i = 0; i < actual.size(); ++i) {
             residuals.push_back(actual[i] - predicted[i]);
         }
         
-        if (!residuals.empty()) {
-            LOG_INFO("Creating residual plot", "ResultsView");
-            try {
-                PlottingUtility::getInstance().createResidualPlot(
-                    predicted,
-                    residuals,
-                    "Residual Plot"
-                );
-                LOG_INFO("Rendering residual plot", "ResultsView");
-                PlottingUtility::getInstance().render();
-            } catch (const std::exception& e) {
-                LOG_ERR("Failed to create or render residual plot: " + std::string(e.what()), "ResultsView");
-            } catch (...) {
-                LOG_ERR("Unknown error creating or rendering residual plot", "ResultsView");
-            }
-        } else {
-            LOG_WARN("No residuals available for plotting", "ResultsView");
-        }
+        PlottingUtility::getInstance().createResidualPlot(
+            predicted, residuals,
+            "Residual Plot"
+        );
         
-        // Create feature importance plot if supported
-        if (model->supportsFeatureImportance()) {
-            try {
-                auto importance = model->getFeatureImportance();
-                if (!importance.empty()) {
-                    LOG_INFO("Creating feature importance plot", "ResultsView");
-                    PlottingUtility::getInstance().createImportancePlot(
-                        importance,
-                        "Feature Importance"
-                    );
-                    LOG_INFO("Rendering feature importance plot", "ResultsView");
-                    PlottingUtility::getInstance().render();
-                }
-            } catch (const std::exception& e) {
-                LOG_ERR("Failed to create feature importance plot: " + std::string(e.what()), "ResultsView");
-            } catch (...) {
-                LOG_ERR("Unknown error creating feature importance plot", "ResultsView");
-            }
+        // Create feature importance plot if available
+        auto importance = model->getFeatureImportance();
+        if (!importance.empty()) {
+            PlottingUtility::getInstance().createImportancePlot(
+                importance,
+                "Feature Importance"
+            );
         }
         
         LOG_INFO("All plots created successfully", "ResultsView");
     } catch (const std::exception& e) {
-        LOG_ERR("Exception in createPlots: " + std::string(e.what()), "ResultsView");
-        throw; // Rethrow to allow calling function to handle
-    } catch (...) {
-        LOG_ERR("Unknown exception in createPlots", "ResultsView");
-        throw; // Rethrow to allow calling function to handle
+        LOG_ERR("Error creating plots: " + std::string(e.what()), "ResultsView");
+        throw;
     }
 }
 
