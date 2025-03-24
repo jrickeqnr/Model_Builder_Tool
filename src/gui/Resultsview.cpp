@@ -172,9 +172,9 @@ void ResultsView::layout() {
             }
         }
         
-        // Create plots if model is set
-        if (model) {
-            LOG_DEBUG("Model is set, creating plots", "ResultsView");
+        // Create plots if model is set and plotting is initialized
+        if (model && plottingInitialized) {
+            LOG_DEBUG("Model is set and plotting is initialized, creating plots", "ResultsView");
             try {
                 createPlots();
                 LOG_INFO("Plots created successfully", "ResultsView");
@@ -186,7 +186,12 @@ void ResultsView::layout() {
                 drawFallbackPlotDisplay();
             }
         } else {
-            LOG_ERR("No model available for plotting", "ResultsView");
+            if (!model) {
+                LOG_ERR("No model available for plotting", "ResultsView");
+            }
+            if (!plottingInitialized) {
+                LOG_ERR("PlottingUtility not initialized", "ResultsView");
+            }
             drawFallbackPlotDisplay();
         }
     } catch (const std::exception& e) {
@@ -277,6 +282,24 @@ void ResultsView::setModel(std::shared_ptr<Model> newModel) {
         
         LOG_DEBUG("Updating parameters display", "ResultsView");
         updateParametersDisplay();
+        
+        // Ensure PlottingUtility is initialized before creating plots
+        if (!plottingInitialized && plotsPanel) {
+            LOG_INFO("Initializing PlottingUtility", "ResultsView");
+            try {
+                PlottingUtility::getInstance().initialize(plotsPanel);
+                plottingInitialized = true;
+                LOG_INFO("PlottingUtility initialized successfully", "ResultsView");
+            } catch (const std::exception& e) {
+                LOG_ERR("Failed to initialize PlottingUtility: " + std::string(e.what()), "ResultsView");
+                drawFallbackPlotDisplay();
+                return;
+            } catch (...) {
+                LOG_ERR("Unknown error initializing PlottingUtility", "ResultsView");
+                drawFallbackPlotDisplay();
+                return;
+            }
+        }
         
         // Create plots for the model
         LOG_DEBUG("Creating plots", "ResultsView");

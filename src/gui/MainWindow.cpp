@@ -294,6 +294,9 @@ void MainWindow::handleVariablesSelected(const std::vector<std::string>& inputVa
         return;
     }
     
+    // Set the DataFrame on the model before fitting
+    model->setDataFrame(dataFrame);
+    
     // Update status message with model type and hyperparameters if any
     std::string statusMsg = "Using " + currentModelType;
     if (currentHyperparameters.size() > 0 && currentModelType != "Linear Regression") {
@@ -322,15 +325,14 @@ void MainWindow::fitModelAndShowResults() {
         bool success = model->fit(X, y, selectedInputVariables, selectedTargetVariable);
         
         if (success) {
-            // Save the dataframe in the model
-            model->setDataFrame(dataFrame);
-            
             // Move to results step
             currentState = State::Results;
             updateUI();
             
+            // Configure results view with model and DataFrame
+            configureResultsView();
+            
             statusBar->copy_label("Model fitted successfully");
-            handleModelFitted();
         } else {
             fl_alert("Failed to fit model");
             statusBar->copy_label("Failed to fit model");
@@ -343,7 +345,11 @@ void MainWindow::fitModelAndShowResults() {
 
 void MainWindow::configureResultsView() {
     // Update results view with model
-    resultsView->setModel(model);
+    if (resultsView) {
+        resultsView->setModel(model);
+        // Force layout to ensure PlottingUtility is initialized
+        resultsView->layout();
+    }
 }
 
 void MainWindow::handleModelFitted() {
