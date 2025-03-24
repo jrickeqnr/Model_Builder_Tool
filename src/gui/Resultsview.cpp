@@ -63,19 +63,35 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     parametersPanel->end();
     
     LOG_DEBUG("Creating plots panel", "ResultsView");
-    // Plots panel
-    plotsPanel = new Fl_Gl_Window(x + padding, statisticsPanel->y() + statisticsPanel->h() + padding, 
-                            w - 2 * padding, bottomHeight);
-    plotsPanel->box(FL_DOWN_BOX);
-    plotsPanel->color(FL_WHITE);
-    plotsPanel->begin();
+    // Create plots panel as an OpenGL window
+    class PlotGLWindow : public Fl_Gl_Window {
+    public:
+        PlotGLWindow(int x, int y, int w, int h) : Fl_Gl_Window(x, y, w, h) {
+            mode(FL_RGB | FL_DOUBLE | FL_DEPTH | FL_OPENGL3);
+        }
+        void draw() override {
+            if (!valid()) {
+                valid(1);
+                glViewport(0, 0, pixel_w(), pixel_h());
+            }
+        }
+    };
     
-    // Create the export button
-    exportButton = new Fl_Button(plotsPanel->w() - 110, plotsPanel->h() - 40,
-                               100, 30, "Export Results");
-    exportButton->callback(exportButtonCallback, this);
-    
-    plotsPanel->end();
+    plotsPanel = new PlotGLWindow(x + w/2, y, w/2, h - 40);
+    if (!plotsPanel) {
+        LOG_ERR("Failed to create plots panel", "ResultsView");
+    } else {
+        plotsPanel->box(FL_FLAT_BOX);
+        plotsPanel->color(FL_WHITE);
+        
+        // Create export button
+        exportButton = new Fl_Button(x + w - 120, y + 10, 100, 25, "Export");
+        if (!exportButton) {
+            LOG_ERR("Failed to create export button", "ResultsView");
+        } else {
+            exportButton->callback(exportButtonCallback, this);
+        }
+    }
     
     end();
     
@@ -117,37 +133,53 @@ ResultsView::~ResultsView() {
 
 void ResultsView::layout() {
     LOG_INFO("ResultsView::layout() called", "ResultsView");
+    LOG_DEBUG("ResultsView dimensions: " + std::to_string(w()) + "x" + std::to_string(h()), "ResultsView");
     
-    // Get current dimensions
-    int w = this->w();
-    int h = this->h();
-    LOG_DEBUG("ResultsView dimensions: " + std::to_string(w) + "x" + std::to_string(h), "ResultsView");
+    // Calculate dimensions
+    int padding = 10;
+    int panelWidth = (w() - 3 * padding) / 2;
+    int topHeight = h() / 2 - padding;
+    int bottomHeight = h() - topHeight - 3 * padding;
     
-    // Position UI components
-    LOG_DEBUG("Positioning UI components", "ResultsView");
-    if (statisticsPanel) {
-        statisticsPanel->resize(10, 10, w/3 - 20, h/2 - 20);
-    }
-    if (parametersPanel) {
-        parametersPanel->resize(w/3 + 10, 10, w/3 - 20, h/2 - 20);
-    }
-    if (plotsPanel) {
-        plotsPanel->resize(2*w/3 + 10, 10, w/3 - 20, h/2 - 20);
+    // Position statistics panel
+    statisticsPanel->resize(x() + padding, y() + padding, panelWidth, topHeight);
+    
+    // Position parameters panel
+    parametersPanel->resize(x() + padding, statisticsPanel->y() + statisticsPanel->h() + padding, 
+                          panelWidth, bottomHeight);
+    
+    // Position plots panel
+    plotsPanel->resize(x() + panelWidth + 2 * padding, y() + padding, 
+                      w() - panelWidth - 3 * padding, h() - 2 * padding);
+    
+    // Position export button within plots panel
+    if (exportButton) {
+        exportButton->resize(plotsPanel->x() + plotsPanel->w() - 110, 
+                           plotsPanel->y() + plotsPanel->h() - 40,
+                           100, 30);
     }
     
-    // Initialize PlottingUtility if needed
-    if (!plottingInitialized && model && plotsPanel) {
+    // Initialize plotting if we have a model and plots panel
+    if (model && plotsPanel) {
         LOG_INFO("Initializing PlottingUtility", "ResultsView");
-        bool initSuccess = PlottingUtility::getInstance().initialize(plotsPanel);
-        if (initSuccess) {
-            plottingInitialized = true;
-            LOG_INFO("PlottingUtility initialized successfully", "ResultsView");
+        try {
+            // Make GL window current before initializing
+            plotsPanel->make_current();
             
-            // Create plots
-            LOG_INFO("Creating plots for model", "ResultsView");
-            createPlots();
-        } else {
-            LOG_ERR("Failed to initialize PlottingUtility", "ResultsView");
+            if (PlottingUtility::getInstance().initialize(plotsPanel)) {
+                LOG_INFO("PlottingUtility initialized successfully", "ResultsView");
+                plottingInitialized = true;
+                
+                // Create plots with the current model data
+                createPlots();
+                
+                // Force a redraw
+                plotsPanel->redraw();
+            } else {
+                LOG_ERR("Failed to initialize PlottingUtility", "ResultsView");
+            }
+        } catch (const std::exception& e) {
+            LOG_ERR("Exception initializing PlottingUtility: " + std::string(e.what()), "ResultsView");
         }
     }
     
@@ -156,13 +188,11 @@ void ResultsView::layout() {
 
 void ResultsView::draw() {
     LOG_DEBUG("ResultsView::draw called", "ResultsView");
-    
-    // Call parent's draw method first
     Fl_Group::draw();
     
-    // Render plots if initialized
-    if (plottingInitialized) {
-        PlottingUtility::getInstance().render();
+    if (plottingInitialized && plotsPanel) {
+        plotsPanel->make_current();
+        render();
     }
     
     LOG_DEBUG("ResultsView::draw completed", "ResultsView");

@@ -35,39 +35,37 @@ bool PlottingUtility::initialize(Fl_Widget* parent) {
     LOG_INFO("Initializing PlottingUtility with widget: " + std::to_string(reinterpret_cast<uintptr_t>(parent)), "PlottingUtility");
     
     try {
+        // Check for GL window - either the parent itself or its window
+        LOG_DEBUG("Checking for GL window", "PlottingUtility");
+        Fl_Gl_Window* gl_window = dynamic_cast<Fl_Gl_Window*>(parent);
+        if (!gl_window) {
+            gl_window = dynamic_cast<Fl_Gl_Window*>(parent->window());
+        }
+        if (!gl_window) {
+            LOG_ERR("No GL window found", "PlottingUtility");
+            return false;
+        }
+        
+        // Make GL window current
+        gl_window->make_current();
+        
         // Initialize ImGui context
         LOG_DEBUG("Initializing ImGui context", "PlottingUtility");
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
+        
+        // Initialize ImPlot context
+        LOG_DEBUG("Initializing ImPlot context", "PlottingUtility");
+        ImPlot::CreateContext();
         
         // Configure ImGui IO
         LOG_DEBUG("Configuring ImGui IO", "PlottingUtility");
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         
-        // Initialize ImPlot context
-        LOG_DEBUG("Initializing ImPlot context", "PlottingUtility");
-        ImPlot::CreateContext();
-        
-        // Get window handle
-        LOG_DEBUG("Getting window handle", "PlottingUtility");
-        Fl_Window* window = parent->window();
-        if (!window) {
-            LOG_ERR("Failed to get window handle", "PlottingUtility");
-            return false;
-        }
-        
-        // Check for GL window
-        LOG_DEBUG("Checking for GL window", "PlottingUtility");
-        Fl_Gl_Window* gl_window = dynamic_cast<Fl_Gl_Window*>(window);
-        if (!gl_window) {
-            LOG_WARN("Parent widget is not in a GL window, rendering may fail", "PlottingUtility");
-            return false;
-        }
-        
         // Initialize ImGui FLTK backend
         LOG_DEBUG("Initializing ImGui FLTK backend", "PlottingUtility");
-        if (!ImGui_ImplFLTK_Init(window, gl_window)) {
+        if (!ImGui_ImplFLTK_Init(parent->window(), gl_window)) {
             LOG_ERR("Failed to initialize ImGui FLTK backend", "PlottingUtility");
             return false;
         }
@@ -82,10 +80,19 @@ bool PlottingUtility::initialize(Fl_Widget* parent) {
         // Set up plot style
         LOG_DEBUG("Setting up plot style", "PlottingUtility");
         ImGui::StyleColorsDark();
-        
-        // Set up ImPlot style
-        LOG_DEBUG("Setting up ImPlot style", "PlottingUtility");
         ImPlot::StyleColorsDark();
+        
+        // Customize plot style
+        ImPlot::GetStyle().LineWeight = 2.0f;
+        ImPlot::GetStyle().MarkerSize = 6.0f;
+        ImPlot::GetStyle().MarkerWeight = 2.0f;
+        ImPlot::GetStyle().FillAlpha = 1.0f;
+        ImPlot::GetStyle().ErrorBarWeight = 1.5f;
+        ImPlot::GetStyle().DigitalBitHeight = 8.0f;
+        
+        // Set grid style
+        ImPlot::GetStyle().MajorGridSize = ImVec2(1.0f, 1.0f);
+        ImPlot::GetStyle().MinorGridSize = ImVec2(1.0f, 1.0f);
         
         // Build font atlas
         LOG_DEBUG("Building font atlas", "PlottingUtility");
@@ -93,7 +100,6 @@ bool PlottingUtility::initialize(Fl_Widget* parent) {
             unsigned char* pixels;
             int width, height;
             io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
-            // The font atlas will be built by the OpenGL3 renderer
         }
         
         LOG_DEBUG("ImPlot style setup complete", "PlottingUtility");
@@ -161,25 +167,26 @@ bool PlottingUtility::renderPlotWindow(const std::string& title, int width, int 
     auto [w, h] = calculatePlotDimensions(width, height);
     LOG_DEBUG("Plot dimensions: " + std::to_string(w) + "x" + std::to_string(h), "PlottingUtility");
     
-    // Start ImGui frame
-    LOG_DEBUG("Starting new ImGui frame", "PlottingUtility");
     try {
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplFLTK_NewFrame();
-        ImGui::NewFrame();
-        
-        // Create a full-size window without decorations
+        // Create a window that fills the entire area
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(ImVec2(static_cast<float>(w), static_cast<float>(h)));
         
         ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoTitleBar | 
-                                      ImGuiWindowFlags_NoResize | 
-                                      ImGuiWindowFlags_NoMove | 
-                                      ImGuiWindowFlags_NoScrollbar |
-                                      ImGuiWindowFlags_NoSavedSettings |
-                                      ImGuiWindowFlags_NoInputs;
+                                     ImGuiWindowFlags_NoResize | 
+                                     ImGuiWindowFlags_NoMove | 
+                                     ImGuiWindowFlags_NoScrollbar |
+                                     ImGuiWindowFlags_NoCollapse |
+                                     ImGuiWindowFlags_NoBackground |
+                                     ImGuiWindowFlags_NoBringToFrontOnFocus;
         
-        ImGui::Begin("PlotWindow", nullptr, windowFlags);
+        if (!ImGui::Begin("PlotWindow", nullptr, windowFlags)) {
+            ImGui::End();
+            return false;
+        }
+        
+        // Add some padding
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10, 10));
         
         // Center the title
         float windowWidth = ImGui::GetWindowWidth();
@@ -187,16 +194,15 @@ bool PlottingUtility::renderPlotWindow(const std::string& title, int width, int 
         ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
         ImGui::Text("%s", title.c_str());
         ImGui::Spacing();
+        ImGui::Spacing();
+        
+        ImGui::PopStyleVar();
         
         LOG_DEBUG("ImGui plot window created successfully", "PlottingUtility");
         return true;
     }
     catch (const std::exception& e) {
         LOG_ERR("Exception during renderPlotWindow: " + std::string(e.what()), "PlottingUtility");
-        return false;
-    }
-    catch (...) {
-        LOG_ERR("Unknown exception during renderPlotWindow", "PlottingUtility");
         return false;
     }
 }
@@ -400,66 +406,63 @@ void PlottingUtility::render() {
     LOG_DEBUG("PlottingUtility::render() called", "PlottingUtility");
     
     try {
-        // Start new frame for both backends
-        ImGui_ImplFLTK_NewFrame();
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui::NewFrame();
-        
-        // Set up the window
-        if (!renderPlotWindow(currentPlot.title, currentPlot.width, currentPlot.height)) {
-            LOG_ERR("Failed to render plot window", "PlottingUtility");
+        // Get GL window and make it current
+        Fl_Gl_Window* gl_window = dynamic_cast<Fl_Gl_Window*>(parentWidget);
+        if (!gl_window) {
+            LOG_ERR("Parent widget is not a GL window", "PlottingUtility");
             return;
         }
         
-        LOG_DEBUG("Rendering plot type: " + std::to_string(static_cast<int>(currentPlot.type)), "PlottingUtility");
+        gl_window->make_current();
         
-        // Actual plotting code based on the type
-        switch (currentPlot.type) {
-            case PlotData::Type::Scatter:
-                renderScatterPlot();
-                break;
-            case PlotData::Type::TimeSeries:
-                renderTimeSeriesPlot();
-                break;
-            case PlotData::Type::Residual:
-                renderResidualPlot();
-                break;
-            case PlotData::Type::Importance:
-                renderImportancePlot();
-                break;
-            case PlotData::Type::LearningCurve:
-                renderLearningCurvePlot();
-                break;
-            default:
-                LOG_WARN("Unknown plot type: " + std::to_string(static_cast<int>(currentPlot.type)), "PlottingUtility");
-                break;
-        }
+        // Set up OpenGL state
+        glViewport(0, 0, gl_window->w(), gl_window->h());
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);  // White background
+        glClear(GL_COLOR_BUFFER_BIT);
         
-        // End the window
+        // Start new frame
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplFLTK_NewFrame();
+        ImGui::NewFrame();
+        
+        // Set up the window
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(ImVec2(gl_window->w(), gl_window->h()));
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | 
+                                      ImGuiWindowFlags_NoResize | 
+                                      ImGuiWindowFlags_NoMove | 
+                                      ImGuiWindowFlags_NoScrollbar |
+                                      ImGuiWindowFlags_NoCollapse |
+                                      ImGuiWindowFlags_NoBackground;
+        
+        ImGui::Begin("Plot Window", nullptr, window_flags);
+        
+        // Calculate plot size to fill most of the window
+        ImVec2 windowSize = ImGui::GetWindowSize();
+        ImVec2 plotSize(windowSize.x - 20, windowSize.y - 40);
+        
+        // Set plot style
+        ImPlot::PushStyleColor(ImPlotCol_FrameBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+        ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+        
+        // Render the scatter plot
+        renderScatterPlot();
+        
+        ImPlot::PopStyleColor(2);
+        
         ImGui::End();
         
-        // Render ImGui
+        // End frame and render
         ImGui::Render();
-        int display_w, display_h;
-        Fl_Window* window = parentWidget->window();
-        if (window) {
-            display_w = window->w();
-            display_h = window->h();
-            glViewport(0, 0, display_w, display_h);
-            glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
-            glClear(GL_COLOR_BUFFER_BIT);
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        }
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        
+        // Swap buffers
+        gl_window->swap_buffers();
         
         LOG_DEBUG("Plot rendering completed successfully", "PlottingUtility");
     }
     catch (const std::exception& e) {
         LOG_ERR("Exception during PlottingUtility rendering: " + std::string(e.what()), "PlottingUtility");
-        throw; // Re-throw to let caller handle with fallback
-    }
-    catch (...) {
-        LOG_ERR("Unknown exception during PlottingUtility rendering", "PlottingUtility");
-        throw; // Re-throw to let caller handle with fallback
     }
 }
 
@@ -467,19 +470,35 @@ void PlottingUtility::renderScatterPlot() {
     LOG_DEBUG("Rendering scatter plot", "PlottingUtility");
     
     try {
-        if (ImPlot::BeginPlot(currentPlot.title.c_str(), ImVec2(-1, -1))) {
-            ImPlot::SetupAxes(currentPlot.xLabel.c_str(), currentPlot.yLabel.c_str());
+        // Set up plot styling
+        ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(10, 10));
+        ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 6.0f);  // Larger markers
+        
+        // Set plot flags
+        ImPlotFlags flags = ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus;
+        ImPlotAxisFlags axisFlags = ImPlotAxisFlags_AutoFit;
+        
+        // Begin plot with explicit size
+        ImVec2 plotSize = ImGui::GetContentRegionAvail();
+        plotSize.y -= 20;  // Leave some space at bottom
+        
+        if (ImPlot::BeginPlot(currentPlot.title.c_str(), plotSize, flags)) {
+            // Set up axes with labels
+            ImPlot::SetupAxis(ImAxis_X1, currentPlot.xLabel.c_str(), axisFlags);
+            ImPlot::SetupAxis(ImAxis_Y1, currentPlot.yLabel.c_str(), axisFlags);
             
             // Add scatter plot
             if (currentPlot.xValues.size() > 0 && currentPlot.yValues.size() > 0) {
-                ImPlot::PlotScatter("Data", 
+                // Set marker style for data points - blue circles
+                ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 6.0f, ImVec4(0.0f, 0.45f, 0.85f, 1.0f), 2.0f);
+                
+                // Plot scatter points
+                ImPlot::PlotScatter("Data Points", 
                                   currentPlot.xValues.data(), 
                                   currentPlot.yValues.data(), 
                                   static_cast<int>(currentPlot.xValues.size()));
-            }
-            
-            // Add identity line (y=x) if data range allows
-            if (!currentPlot.xValues.empty() && !currentPlot.yValues.empty()) {
+                
+                // Add identity line (y=x)
                 double minX = *std::min_element(currentPlot.xValues.begin(), currentPlot.xValues.end());
                 double maxX = *std::max_element(currentPlot.xValues.begin(), currentPlot.xValues.end());
                 double minY = *std::min_element(currentPlot.yValues.begin(), currentPlot.yValues.end());
@@ -491,6 +510,8 @@ void PlottingUtility::renderScatterPlot() {
                 std::vector<double> lineX = {min, max};
                 std::vector<double> lineY = {min, max};
                 
+                // Set line style for identity line - dark gray
+                ImPlot::SetNextLineStyle(ImVec4(0.3f, 0.3f, 0.3f, 1.0f), 2.0f);
                 ImPlot::PlotLine("y=x", lineX.data(), lineY.data(), static_cast<int>(lineX.size()));
                 
                 LOG_DEBUG("Added identity line from " + std::to_string(min) + " to " + std::to_string(max), "PlottingUtility");
@@ -501,6 +522,8 @@ void PlottingUtility::renderScatterPlot() {
         } else {
             LOG_WARN("ImPlot::BeginPlot failed for scatter plot", "PlottingUtility");
         }
+        
+        ImPlot::PopStyleVar(2);
     }
     catch (const std::exception& e) {
         LOG_ERR("Exception during scatter plot rendering: " + std::string(e.what()), "PlottingUtility");

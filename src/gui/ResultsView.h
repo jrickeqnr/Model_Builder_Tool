@@ -74,7 +74,7 @@ private:
     Fl_Text_Display* parametersDisplay;
     Fl_Text_Buffer* parametersBuffer;
     
-    Fl_Group* plotsPanel;
+    Fl_Gl_Window* plotsPanel;
     Fl_Button* exportButton;
     
     // Data
