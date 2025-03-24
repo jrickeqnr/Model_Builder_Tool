@@ -83,8 +83,15 @@ bool ElasticNet::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y,
 }
 
 void ElasticNet::coordinateDescent(const Eigen::MatrixXd& X, const Eigen::VectorXd& y) {
+    std::cout << "Starting coordinate descent optimization" << std::endl;
+    std::cout << "X dimensions: " << X.rows() << " x " << X.cols() << std::endl;
+    std::cout << "y dimensions: " << y.size() << std::endl;
+    
     // Center the data (subtract mean)
-    Eigen::VectorXd y_centered = y.array() - y.mean();
+    double y_mean = y.mean();
+    std::cout << "y mean: " << y_mean << std::endl;
+    
+    Eigen::VectorXd y_centered = y.array() - y_mean;
     Eigen::MatrixXd X_centered = X;
     
     // Center each column of X
@@ -98,7 +105,20 @@ void ElasticNet::coordinateDescent(const Eigen::MatrixXd& X, const Eigen::Vector
     coefficients = Eigen::VectorXd::Zero(nFeatures);
     
     // Calculate initial residuals
-    Eigen::VectorXd residuals = y_centered - X_centered * coefficients;
+    Eigen::VectorXd residuals = y_centered;  // Since coefficients are zero, residuals = y_centered
+    
+    // Safety check dimensions
+    if (X_centered.cols() != coefficients.size()) {
+        std::cerr << "Error: X columns (" << X_centered.cols() 
+                 << ") don't match coefficients size (" << coefficients.size() << ")" << std::endl;
+        return;
+    }
+    
+    if (residuals.size() != X_centered.rows()) {
+        std::cerr << "Error: Residuals size (" << residuals.size() 
+                 << ") doesn't match X rows (" << X_centered.rows() << ")" << std::endl;
+        return;
+    }
     
     // Iterate until convergence or max iterations
     for (int iter = 0; iter < maxIter; ++iter) {
@@ -110,6 +130,12 @@ void ElasticNet::coordinateDescent(const Eigen::MatrixXd& X, const Eigen::Vector
             Eigen::VectorXd X_j = X_centered.col(j);
             
             // Calculate dot product with current residuals
+            if (X_j.size() != residuals.size()) {
+                std::cerr << "Error: X_j size (" << X_j.size() 
+                         << ") doesn't match residuals size (" << residuals.size() << ")" << std::endl;
+                return;
+            }
+            
             double rho = X_j.dot(residuals) + coefficients(j) * X_j.squaredNorm();
             
             // Calculate update with soft thresholding
@@ -135,13 +161,30 @@ void ElasticNet::coordinateDescent(const Eigen::MatrixXd& X, const Eigen::Vector
         
         // Check convergence
         if (max_change < tol) {
+            std::cout << "Converged at iteration " << iter << " with max change " << max_change << std::endl;
             break;
+        }
+        
+        // Add occasional reporting for long-running optimizations
+        if (iter % 100 == 0) {
+            std::cout << "Iteration " << iter << ", max change: " << max_change << std::endl;
         }
     }
     
     // Calculate intercept
-    Eigen::VectorXd X_mean = X.rowwise().mean();
-    intercept = y.mean() - X_mean.dot(coefficients);
+    Eigen::VectorXd X_mean = X.colwise().mean();  // Use colwise() for clarity
+    
+    // Safety check
+    if (X_mean.size() != coefficients.size()) {
+        std::cerr << "Error: X_mean size (" << X_mean.size() 
+                 << ") doesn't match coefficients size (" << coefficients.size() << ")" << std::endl;
+        // Default to 0 intercept in case of error
+        intercept = 0.0;
+        return;
+    }
+    
+    intercept = y_mean - X_mean.dot(coefficients);
+    std::cout << "Intercept: " << intercept << std::endl;
 }
 
 Eigen::VectorXd ElasticNet::predict(const Eigen::MatrixXd& X) const {
