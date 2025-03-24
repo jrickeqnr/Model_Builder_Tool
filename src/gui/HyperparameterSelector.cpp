@@ -2,7 +2,7 @@
 #include <FL/Fl.H>
 #include <FL/fl_draw.H>
 #include <sstream>
-#include "util/Logger.h"
+#include "utils/Logger.h"
 
 HyperparameterSelector::HyperparameterSelector(int x, int y, int w, int h)
     : Fl_Group(x, y, w, h), currentModelType("")
