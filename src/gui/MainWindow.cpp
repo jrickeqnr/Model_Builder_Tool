@@ -403,10 +403,43 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
             result = std::make_shared<LinearRegression>();
         }
         else if (modelType == "ElasticNet") {
-            // TODO: Implement ElasticNet model
-            LOG_ERROR("ElasticNet model not yet implemented", "MainWindow");
-            fl_alert("ElasticNet model is not yet implemented. Please select a different model type.");
-            return nullptr;
+            // Parse hyperparameters for ElasticNet
+            double alpha = 0.5;
+            double lambda = 1.0;
+            int max_iter = 1000;
+            double tol = 0.0001;
+
+            // Parse hyperparameters if they exist
+            if (!currentHyperparameters.empty()) {
+                try {
+                    // Check if the parameter exists before trying to access it
+                    if (currentHyperparameters.find("alpha") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("alpha") != "auto") {
+                        alpha = std::stod(currentHyperparameters.at("alpha"));
+                    }
+                    if (currentHyperparameters.find("lambda") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("lambda") != "auto") {
+                        lambda = std::stod(currentHyperparameters.at("lambda"));
+                    }
+                    if (currentHyperparameters.find("max_iter") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("max_iter") != "auto") {
+                        max_iter = std::stoi(currentHyperparameters.at("max_iter"));
+                    }
+                    if (currentHyperparameters.find("tol") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("tol") != "auto") {
+                        tol = std::stod(currentHyperparameters.at("tol"));
+                    }
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Error parsing ElasticNet hyperparameters: " + std::string(e.what()), "MainWindow");
+                }
+            }
+
+            LOG_INFO("Creating ElasticNet with alpha=" + std::to_string(alpha) + 
+                     ", lambda=" + std::to_string(lambda) + 
+                     ", max_iter=" + std::to_string(max_iter) + 
+                     ", tol=" + std::to_string(tol), "MainWindow");
+                     
+            result = std::make_shared<ElasticNet>(alpha, lambda, max_iter, tol);
         }
         else if (modelType == "XGBoost") {
             // Create XGBoost with selected hyperparameters
@@ -421,26 +454,100 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
             // Parse hyperparameters if they exist
             if (!currentHyperparameters.empty()) {
                 try {
-                    learning_rate = std::stod(currentHyperparameters.at("learning_rate"));
-                    max_depth = std::stoi(currentHyperparameters.at("max_depth"));
-                    n_estimators = std::stoi(currentHyperparameters.at("n_estimators"));
-                    subsample = std::stod(currentHyperparameters.at("subsample"));
-                    colsample_bytree = std::stod(currentHyperparameters.at("colsample_bytree"));
-                    min_child_weight = std::stoi(currentHyperparameters.at("min_child_weight"));
-                    gamma = std::stod(currentHyperparameters.at("gamma"));
+                    if (currentHyperparameters.find("learning_rate") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("learning_rate") != "auto") {
+                        learning_rate = std::stod(currentHyperparameters.at("learning_rate"));
+                    }
+                    if (currentHyperparameters.find("max_depth") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("max_depth") != "auto") {
+                        max_depth = std::stoi(currentHyperparameters.at("max_depth"));
+                    }
+                    if (currentHyperparameters.find("n_estimators") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("n_estimators") != "auto") {
+                        n_estimators = std::stoi(currentHyperparameters.at("n_estimators"));
+                    }
+                    if (currentHyperparameters.find("subsample") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("subsample") != "auto") {
+                        subsample = std::stod(currentHyperparameters.at("subsample"));
+                    }
+                    if (currentHyperparameters.find("colsample_bytree") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("colsample_bytree") != "auto") {
+                        colsample_bytree = std::stod(currentHyperparameters.at("colsample_bytree"));
+                    }
+                    if (currentHyperparameters.find("min_child_weight") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("min_child_weight") != "auto") {
+                        min_child_weight = std::stoi(currentHyperparameters.at("min_child_weight"));
+                    }
+                    if (currentHyperparameters.find("gamma") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("gamma") != "auto") {
+                        gamma = std::stod(currentHyperparameters.at("gamma"));
+                    }
                 } catch (const std::exception& e) {
                     LOG_ERROR("Error parsing XGBoost hyperparameters: " + std::string(e.what()), "MainWindow");
                 }
             }
 
+            LOG_INFO("Creating XGBoost with learning_rate=" + std::to_string(learning_rate) + 
+                     ", max_depth=" + std::to_string(max_depth) + 
+                     ", n_estimators=" + std::to_string(n_estimators) + 
+                     ", subsample=" + std::to_string(subsample) + 
+                     ", colsample_bytree=" + std::to_string(colsample_bytree) + 
+                     ", min_child_weight=" + std::to_string(min_child_weight) + 
+                     ", gamma=" + std::to_string(gamma), "MainWindow");
+                     
             result = std::make_shared<XGBoost>(learning_rate, max_depth, n_estimators,
                                              subsample, colsample_bytree, min_child_weight, gamma);
         }
         else if (modelType == "Random Forest") {
-            // TODO: Implement Random Forest model
-            LOG_ERROR("Random Forest model not yet implemented", "MainWindow");
-            fl_alert("Random Forest model is not yet implemented. Please select a different model type.");
-            return nullptr;
+            // Parse hyperparameters for Random Forest
+            int n_estimators = 100;
+            int max_depth = 10;
+            int min_samples_split = 2;
+            int min_samples_leaf = 1;
+            std::string max_features = "auto";
+            bool bootstrap = true;
+
+            // Parse hyperparameters if they exist
+            if (!currentHyperparameters.empty()) {
+                try {
+                    if (currentHyperparameters.find("n_estimators") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("n_estimators") != "auto") {
+                        n_estimators = std::stoi(currentHyperparameters.at("n_estimators"));
+                    }
+                    if (currentHyperparameters.find("max_depth") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("max_depth") != "auto") {
+                        max_depth = std::stoi(currentHyperparameters.at("max_depth"));
+                    }
+                    if (currentHyperparameters.find("min_samples_split") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("min_samples_split") != "auto") {
+                        min_samples_split = std::stoi(currentHyperparameters.at("min_samples_split"));
+                    }
+                    if (currentHyperparameters.find("min_samples_leaf") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("min_samples_leaf") != "auto") {
+                        min_samples_leaf = std::stoi(currentHyperparameters.at("min_samples_leaf"));
+                    }
+                    if (currentHyperparameters.find("max_features") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("max_features") != "auto") {
+                        max_features = currentHyperparameters.at("max_features");
+                    }
+                    if (currentHyperparameters.find("bootstrap") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("bootstrap") != "auto") {
+                        bootstrap = (currentHyperparameters.at("bootstrap") == "true");
+                    }
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Error parsing Random Forest hyperparameters: " + std::string(e.what()), "MainWindow");
+                }
+            }
+
+            LOG_INFO("Creating Random Forest with n_estimators=" + std::to_string(n_estimators) + 
+                     ", max_depth=" + std::to_string(max_depth) + 
+                     ", min_samples_split=" + std::to_string(min_samples_split) + 
+                     ", min_samples_leaf=" + std::to_string(min_samples_leaf) + 
+                     ", max_features=" + max_features + 
+                     ", bootstrap=" + (bootstrap ? "true" : "false"), "MainWindow");
+                     
+            result = std::make_shared<RandomForest>(n_estimators, max_depth, min_samples_split,
+                                                  min_samples_leaf, max_features, bootstrap);
         }
         else if (modelType == "Neural Network") {
             // Create Neural Network with selected hyperparameters
@@ -455,26 +562,65 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
             // Parse hyperparameters if they exist
             if (!currentHyperparameters.empty()) {
                 try {
-                    // Parse hidden layer sizes from comma-separated string
-                    std::string hidden_layers = currentHyperparameters.at("hidden_layer_sizes");
-                    std::stringstream ss(hidden_layers);
-                    std::string layer;
-                    hidden_layer_sizes.clear();
-                    while (std::getline(ss, layer, ',')) {
-                        hidden_layer_sizes.push_back(std::stoi(layer));
+                    if (currentHyperparameters.find("hidden_layer_sizes") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("hidden_layer_sizes") != "auto") {
+                        // Parse hidden layer sizes from comma-separated string
+                        std::string hidden_layers = currentHyperparameters.at("hidden_layer_sizes");
+                        std::stringstream ss(hidden_layers);
+                        std::string layer;
+                        hidden_layer_sizes.clear();
+                        while (std::getline(ss, layer, ',')) {
+                            hidden_layer_sizes.push_back(std::stoi(layer));
+                        }
                     }
 
-                    activation = currentHyperparameters.at("activation");
-                    learning_rate = std::stod(currentHyperparameters.at("learning_rate"));
-                    max_iter = std::stoi(currentHyperparameters.at("max_iter"));
-                    batch_size = std::stoi(currentHyperparameters.at("batch_size"));
-                    solver = currentHyperparameters.at("solver");
-                    alpha = std::stod(currentHyperparameters.at("alpha"));
+                    if (currentHyperparameters.find("activation") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("activation") != "auto") {
+                        activation = currentHyperparameters.at("activation");
+                    }
+                    if (currentHyperparameters.find("learning_rate") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("learning_rate") != "auto") {
+                        learning_rate = std::stod(currentHyperparameters.at("learning_rate"));
+                    }
+                    if (currentHyperparameters.find("max_iter") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("max_iter") != "auto") {
+                        max_iter = std::stoi(currentHyperparameters.at("max_iter"));
+                    }
+                    if (currentHyperparameters.find("batch_size") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("batch_size") != "auto") {
+                        batch_size = std::stoi(currentHyperparameters.at("batch_size"));
+                    }
+                    if (currentHyperparameters.find("solver") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("solver") != "auto") {
+                        solver = currentHyperparameters.at("solver");
+                    }
+                    if (currentHyperparameters.find("alpha") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("alpha") != "auto") {
+                        alpha = std::stod(currentHyperparameters.at("alpha"));
+                    }
                 } catch (const std::exception& e) {
                     LOG_ERROR("Error parsing Neural Network hyperparameters: " + std::string(e.what()), "MainWindow");
                 }
             }
 
+            // Prepare hidden layer sizes string for logging
+            std::string hiddenLayersStr = "{";
+            for (size_t i = 0; i < hidden_layer_sizes.size(); ++i) {
+                hiddenLayersStr += std::to_string(hidden_layer_sizes[i]);
+                if (i < hidden_layer_sizes.size() - 1) {
+                    hiddenLayersStr += ",";
+                }
+            }
+            hiddenLayersStr += "}";
+
+            LOG_INFO("Creating Neural Network with hidden_layer_sizes=" + hiddenLayersStr + 
+                     ", activation=" + activation + 
+                     ", learning_rate=" + std::to_string(learning_rate) + 
+                     ", max_iter=" + std::to_string(max_iter) + 
+                     ", batch_size=" + std::to_string(batch_size) + 
+                     ", solver=" + solver + 
+                     ", alpha=" + std::to_string(alpha), "MainWindow");
+                     
             result = std::make_shared<NeuralNetwork>(hidden_layer_sizes, activation,
                                                    learning_rate, max_iter, batch_size,
                                                    solver, alpha);
@@ -492,18 +638,47 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
             // Parse hyperparameters if they exist
             if (!currentHyperparameters.empty()) {
                 try {
-                    learning_rate = std::stod(currentHyperparameters.at("learning_rate"));
-                    n_estimators = std::stoi(currentHyperparameters.at("n_estimators"));
-                    max_depth = std::stoi(currentHyperparameters.at("max_depth"));
-                    min_samples_split = std::stoi(currentHyperparameters.at("min_samples_split"));
-                    min_samples_leaf = std::stoi(currentHyperparameters.at("min_samples_leaf"));
-                    subsample = std::stod(currentHyperparameters.at("subsample"));
-                    loss = currentHyperparameters.at("loss");
+                    if (currentHyperparameters.find("learning_rate") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("learning_rate") != "auto") {
+                        learning_rate = std::stod(currentHyperparameters.at("learning_rate"));
+                    }
+                    if (currentHyperparameters.find("n_estimators") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("n_estimators") != "auto") {
+                        n_estimators = std::stoi(currentHyperparameters.at("n_estimators"));
+                    }
+                    if (currentHyperparameters.find("max_depth") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("max_depth") != "auto") {
+                        max_depth = std::stoi(currentHyperparameters.at("max_depth"));
+                    }
+                    if (currentHyperparameters.find("min_samples_split") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("min_samples_split") != "auto") {
+                        min_samples_split = std::stoi(currentHyperparameters.at("min_samples_split"));
+                    }
+                    if (currentHyperparameters.find("min_samples_leaf") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("min_samples_leaf") != "auto") {
+                        min_samples_leaf = std::stoi(currentHyperparameters.at("min_samples_leaf"));
+                    }
+                    if (currentHyperparameters.find("subsample") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("subsample") != "auto") {
+                        subsample = std::stod(currentHyperparameters.at("subsample"));
+                    }
+                    if (currentHyperparameters.find("loss") != currentHyperparameters.end() && 
+                        currentHyperparameters.at("loss") != "auto") {
+                        loss = currentHyperparameters.at("loss");
+                    }
                 } catch (const std::exception& e) {
                     LOG_ERROR("Error parsing Gradient Boosting hyperparameters: " + std::string(e.what()), "MainWindow");
                 }
             }
 
+            LOG_INFO("Creating Gradient Boosting with learning_rate=" + std::to_string(learning_rate) + 
+                     ", n_estimators=" + std::to_string(n_estimators) + 
+                     ", max_depth=" + std::to_string(max_depth) + 
+                     ", min_samples_split=" + std::to_string(min_samples_split) + 
+                     ", min_samples_leaf=" + std::to_string(min_samples_leaf) + 
+                     ", subsample=" + std::to_string(subsample) + 
+                     ", loss=" + loss, "MainWindow");
+                     
             result = std::make_shared<GradientBoosting>(learning_rate, n_estimators,
                                                       max_depth, min_samples_split,
                                                       min_samples_leaf, subsample, loss);
