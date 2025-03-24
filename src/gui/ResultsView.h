@@ -1,12 +1,13 @@
 #pragma once
 
 #include <FL/Fl_Group.H>
-#include <FL/Fl_Button.H>
-#include <FL/Fl_Multiline_Output.H>
-#include <FL/Fl_Box.H>
-#include <FL/Fl_Choice.H>
+#include <FL/Fl_Gl_Window.H>
 #include <FL/Fl_Text_Display.H>
 #include <FL/Fl_Text_Buffer.H>
+#include <FL/Fl_Button.H>
+#include <FL/Fl_Box.H>
+#include <FL/Fl_Choice.H>
+#include <FL/Fl_Multiline_Output.H>
 #include <map>
 #include <string>
 #include <memory>
@@ -58,6 +59,8 @@ public:
      * @brief Draw a fallback display when plotting fails
      */
     void drawFallbackPlotDisplay();
+    
+    void render();  // Add render method declaration
 
 private:
     // UI components - match the names used in the CPP file
@@ -81,7 +84,7 @@ private:
     
     // Plot state
     bool plottingInitialized;
-    int currentModelIndex;
+    size_t currentModelIndex;
     bool showModelNavigation;
     
     // Callbacks

@@ -44,6 +44,7 @@ MainWindow::MainWindow(int width, int height, const char* title)
     
     // Set window properties
     size_range(800, 600);
+    callback(MainWindow::windowCloseCallback, this);  // Use fully qualified name
     LOG_DEBUG("Set minimum window size to 800x600", "MainWindow");
     
     // Create menu bar
@@ -395,8 +396,10 @@ void MainWindow::configureResultsView() {
     // Update results view with model
     if (resultsView) {
         resultsView->setModel(model);
-        // Force layout to ensure PlottingUtility is initialized
+        // Only call layout once after setting the model
         resultsView->layout();
+        // Process any pending events
+        Fl::check();
     }
 }
 
@@ -506,12 +509,22 @@ void MainWindow::updateUI() {
             headerLabel->copy_label("Results");
             resultsView->show();
             currentPanel = resultsView;
+            // Force a redraw and render of the results view
+            resultsView->redraw();
+            if (resultsView) {
+                resultsView->render();
+            }
             break;
     }
     
     // Redraw the entire window to ensure all components are properly displayed
     this->redraw();
-    Fl::check();  // Process any pending events
+    
+    // Process any pending events and ensure the UI is responsive
+    for (int i = 0; i < 3; i++) {
+        Fl::check();
+    }
+    
     LOG_INFO("UI updated", "MainWindow");
 }
 
@@ -849,5 +862,12 @@ void MainWindow::menuCallback(Fl_Widget* widget, void* userData) {
         LOG_ERR("Exception in menu callback: " + std::string(e.what()), "MainWindow");
     } catch (...) {
         LOG_ERR("Unknown exception in menu callback", "MainWindow");
+    }
+}
+
+void MainWindow::windowCloseCallback(Fl_Widget* widget, void* data) {
+    MainWindow* window = static_cast<MainWindow*>(data);
+    if (window) {
+        window->hide();
     }
 }

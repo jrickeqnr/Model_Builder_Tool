@@ -1,29 +1,31 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <fstream>
-#include <sstream>
-#include <iostream>
-#include <filesystem>
-#include <cstdlib>
-#include <chrono>
-#include <algorithm>  // Add algorithm before Windows.h
-#include <unordered_map>
+// Windows headers
+#include <windows.h>
+
+// OpenGL headers
+#include <GL/gl.h>
+
+// FLTK headers
 #include <FL/Fl_Widget.H>
+#include <FL/Fl_Window.H>
+#include <FL/Fl_Gl_Window.H>
 
 // ImGui headers
 #include "imgui.h"
+#include "implot.h"
 #include "../backends/imgui_impl_fltk.h"
 #include "../backends/imgui_impl_opengl3.h"
 
-// Prevent Windows from defining min/max macros
-#define NOMINMAX
-#include <windows.h>
-#include <shlobj.h>  // For SHGetFolderPathA and CSIDL_LOCAL_APPDATA
+// Standard library headers
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <memory>
+#include <utility>
 
-#include <Eigen/Dense>
-#include "data/DataFrame.h"
+// Project headers
+#include "utils/Logger.h"
 
 namespace fs = std::filesystem;
 
@@ -41,11 +43,16 @@ public:
      */
     static PlottingUtility& getInstance();
     
+    // Delete copy constructor and assignment operator
+    PlottingUtility(const PlottingUtility&) = delete;
+    PlottingUtility& operator=(const PlottingUtility&) = delete;
+    
     /**
      * @brief Initialize the plotting utility with a parent widget
      * @param parentWidget The parent widget to render within
+     * @return True if initialization was successful, false otherwise
      */
-    void initialize(Fl_Widget* parentWidget);
+    bool initialize(Fl_Widget* parentWidget);
     
     /**
      * @brief Clean up plotting utility resources
@@ -66,8 +73,8 @@ public:
         const std::vector<double>& actual,
         const std::vector<double>& predicted,
         const std::string& title,
-        const std::string& xLabel,
-        const std::string& yLabel,
+        const std::string& xLabel = "X",
+        const std::string& yLabel = "Y",
         int width = 0,
         int height = 0
     );
@@ -147,7 +154,11 @@ public:
     void clear();
 
 private:
-    // Parent widget to render within
+    // Private constructor for singleton
+    PlottingUtility() : initialized(false), parentWidget(nullptr) {}
+    
+    // Member variables
+    bool initialized;
     Fl_Widget* parentWidget;
     
     /**

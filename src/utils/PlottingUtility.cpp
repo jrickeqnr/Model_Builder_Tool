@@ -29,60 +29,83 @@ PlottingUtility& PlottingUtility::getInstance() {
     return instance;
 }
 
-void PlottingUtility::initialize(Fl_Widget* parentWidget) {
-    if (!parentWidget) {
-        LOG_ERR("Cannot initialize PlottingUtility with null parent widget", "PlottingUtility");
-        throw std::invalid_argument("Parent widget cannot be null");
+bool PlottingUtility::initialize(Fl_Widget* parent) {
+    if (initialized) return true;
+    
+    LOG_INFO("Initializing PlottingUtility with widget: " + std::to_string(reinterpret_cast<uintptr_t>(parent)), "PlottingUtility");
+    
+    try {
+        // Initialize ImGui context
+        LOG_DEBUG("Initializing ImGui context", "PlottingUtility");
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        
+        // Configure ImGui IO
+        LOG_DEBUG("Configuring ImGui IO", "PlottingUtility");
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        
+        // Initialize ImPlot context
+        LOG_DEBUG("Initializing ImPlot context", "PlottingUtility");
+        ImPlot::CreateContext();
+        
+        // Get window handle
+        LOG_DEBUG("Getting window handle", "PlottingUtility");
+        Fl_Window* window = parent->window();
+        if (!window) {
+            LOG_ERR("Failed to get window handle", "PlottingUtility");
+            return false;
+        }
+        
+        // Check for GL window
+        LOG_DEBUG("Checking for GL window", "PlottingUtility");
+        Fl_Gl_Window* gl_window = dynamic_cast<Fl_Gl_Window*>(window);
+        if (!gl_window) {
+            LOG_WARN("Parent widget is not in a GL window, rendering may fail", "PlottingUtility");
+            return false;
+        }
+        
+        // Initialize ImGui FLTK backend
+        LOG_DEBUG("Initializing ImGui FLTK backend", "PlottingUtility");
+        if (!ImGui_ImplFLTK_Init(window, gl_window)) {
+            LOG_ERR("Failed to initialize ImGui FLTK backend", "PlottingUtility");
+            return false;
+        }
+        
+        // Initialize ImGui OpenGL3 backend
+        LOG_DEBUG("Initializing ImGui OpenGL3 backend", "PlottingUtility");
+        if (!ImGui_ImplOpenGL3_Init("#version 130")) {
+            LOG_ERR("Failed to initialize ImGui OpenGL3 backend", "PlottingUtility");
+            return false;
+        }
+        
+        // Set up plot style
+        LOG_DEBUG("Setting up plot style", "PlottingUtility");
+        ImGui::StyleColorsDark();
+        
+        // Set up ImPlot style
+        LOG_DEBUG("Setting up ImPlot style", "PlottingUtility");
+        ImPlot::StyleColorsDark();
+        
+        // Build font atlas
+        LOG_DEBUG("Building font atlas", "PlottingUtility");
+        if (!io.Fonts->IsBuilt()) {
+            unsigned char* pixels;
+            int width, height;
+            io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+            // The font atlas will be built by the OpenGL3 renderer
+        }
+        
+        LOG_DEBUG("ImPlot style setup complete", "PlottingUtility");
+        initialized = true;
+        parentWidget = parent;
+        
+        LOG_INFO("PlottingUtility initialization complete", "PlottingUtility");
+        return true;
+    } catch (const std::exception& e) {
+        LOG_ERR("Exception during PlottingUtility initialization: " + std::string(e.what()), "PlottingUtility");
+        return false;
     }
-    
-    LOG_INFO("Initializing PlottingUtility with widget: " + 
-             std::to_string((intptr_t)parentWidget), "PlottingUtility");
-    
-    this->parentWidget = parentWidget;
-    
-    // Initialize ImGui
-    LOG_DEBUG("Initializing ImGui context", "PlottingUtility");
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGui::StyleColorsDark();
-    
-    // Set up ImGui IO configuration
-    LOG_DEBUG("Configuring ImGui IO", "PlottingUtility");
-    ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    
-    // Initialize ImPlot
-    LOG_DEBUG("Initializing ImPlot context", "PlottingUtility");
-    ImPlot::CreateContext();
-    
-    // Initialize FLTK backend with both window parameters
-    // Cast to both Fl_Window and Fl_Gl_Window types if possible
-    LOG_DEBUG("Getting window handle", "PlottingUtility");
-    Fl_Window* window = static_cast<Fl_Window*>(parentWidget->window());
-    if (!window) {
-        LOG_ERR("Failed to get window from parent widget", "PlottingUtility");
-        throw std::runtime_error("Failed to get window from parent widget");
-    }
-    
-    LOG_DEBUG("Checking for GL window", "PlottingUtility");
-    Fl_Gl_Window* gl_window = dynamic_cast<Fl_Gl_Window*>(parentWidget->window());
-    if (!gl_window) {
-        LOG_WARN("Parent widget is not in a GL window, rendering may fail", "PlottingUtility");
-    }
-    
-    // If parentWidget is not inside a GL window, this won't work properly
-    LOG_DEBUG("Initializing ImGui FLTK backend", "PlottingUtility");
-    ImGui_ImplFLTK_Init(window, gl_window);
-    
-    // Initialize OpenGL3 backend
-    LOG_DEBUG("Initializing ImGui OpenGL3 backend", "PlottingUtility");
-    ImGui_ImplOpenGL3_Init("#version 130");
-    
-    // Set up plot style
-    LOG_DEBUG("Setting up plot style", "PlottingUtility");
-    setupPlotStyle();
-    
-    LOG_INFO("PlottingUtility initialization complete", "PlottingUtility");
 }
 
 void PlottingUtility::cleanup() {
@@ -372,19 +395,16 @@ void PlottingUtility::createLearningCurvePlot(
 }
 
 void PlottingUtility::render() {
+    if (!initialized || !parentWidget) return;
+    
     LOG_DEBUG("PlottingUtility::render() called", "PlottingUtility");
     
-    if (currentPlot.type == PlotData::Type::None) {
-        LOG_WARN("No plot data available to render", "PlottingUtility");
-        return;
-    }
-    
-    if (!parentWidget) {
-        LOG_ERR("Cannot render: parentWidget is null", "PlottingUtility");
-        return;
-    }
-    
     try {
+        // Start new frame for both backends
+        ImGui_ImplFLTK_NewFrame();
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui::NewFrame();
+        
         // Set up the window
         if (!renderPlotWindow(currentPlot.title, currentPlot.width, currentPlot.height)) {
             LOG_ERR("Failed to render plot window", "PlottingUtility");
@@ -418,19 +438,27 @@ void PlottingUtility::render() {
         // End the window
         ImGui::End();
         
-        // Render ImGui frame
-        LOG_DEBUG("Rendering ImGui frame", "PlottingUtility");
+        // Render ImGui
         ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        int display_w, display_h;
+        Fl_Window* window = parentWidget->window();
+        if (window) {
+            display_w = window->w();
+            display_h = window->h();
+            glViewport(0, 0, display_w, display_h);
+            glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
+            glClear(GL_COLOR_BUFFER_BIT);
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        }
         
         LOG_DEBUG("Plot rendering completed successfully", "PlottingUtility");
     }
     catch (const std::exception& e) {
-        LOG_ERR("Exception during plot rendering: " + std::string(e.what()), "PlottingUtility");
+        LOG_ERR("Exception during PlottingUtility rendering: " + std::string(e.what()), "PlottingUtility");
         throw; // Re-throw to let caller handle with fallback
     }
     catch (...) {
-        LOG_ERR("Unknown exception during plot rendering", "PlottingUtility");
+        LOG_ERR("Unknown exception during PlottingUtility rendering", "PlottingUtility");
         throw; // Re-throw to let caller handle with fallback
     }
 }

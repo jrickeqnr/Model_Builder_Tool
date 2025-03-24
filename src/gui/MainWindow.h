@@ -42,6 +42,9 @@ public:
     // Static callback functions for FLTK - moved to public
     static void menuCallback(Fl_Widget* widget, void* userData);
 
+    // Window close callback
+    static void windowCloseCallback(Fl_Widget* widget, void* data);
+
 private:
     // Workflow state management
     enum class State {

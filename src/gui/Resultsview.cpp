@@ -64,7 +64,7 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     
     LOG_DEBUG("Creating plots panel", "ResultsView");
     // Plots panel
-    plotsPanel = new Fl_Group(x + padding, statisticsPanel->y() + statisticsPanel->h() + padding, 
+    plotsPanel = new Fl_Gl_Window(x + padding, statisticsPanel->y() + statisticsPanel->h() + padding, 
                             w - 2 * padding, bottomHeight);
     plotsPanel->box(FL_DOWN_BOX);
     plotsPanel->color(FL_WHITE);
@@ -118,88 +118,37 @@ ResultsView::~ResultsView() {
 void ResultsView::layout() {
     LOG_INFO("ResultsView::layout() called", "ResultsView");
     
-    // Do not call the base layout() method since it doesn't exist in Fl_Group
-    
-    // Get dimensions for layout
-    int padding = 10;
+    // Get current dimensions
     int w = this->w();
     int h = this->h();
     LOG_DEBUG("ResultsView dimensions: " + std::to_string(w) + "x" + std::to_string(h), "ResultsView");
     
-    try {
-        // Initialize PlottingUtility if not already done
-        if (!plottingInitialized && plotsPanel) {
-            LOG_INFO("Initializing PlottingUtility", "ResultsView");
-            try {
-                PlottingUtility::getInstance().initialize(plotsPanel);
-                plottingInitialized = true;
-                LOG_INFO("PlottingUtility initialized successfully", "ResultsView");
-            } catch (const std::exception& e) {
-                LOG_ERR("Failed to initialize PlottingUtility: " + std::string(e.what()), "ResultsView");
-                drawFallbackPlotDisplay();
-                return;
-            } catch (...) {
-                LOG_ERR("Unknown error initializing PlottingUtility", "ResultsView");
-                drawFallbackPlotDisplay();
-                return;
-            }
-        }
-        
-        // Position UI components
-        LOG_DEBUG("Positioning UI components", "ResultsView");
-        
-        // Calculate panel sizes
-        int topHeight = 150;
-        int bottomHeight = h - topHeight - 3 * padding;
-        
-        // Position statistics and parameters panels
-        if (statisticsPanel && parametersPanel) {
-            statisticsPanel->resize(x() + padding, y() + padding, w / 2 - padding * 1.5, topHeight);
-            parametersPanel->resize(statisticsPanel->x() + statisticsPanel->w() + padding, y() + padding, 
-                                  w / 2 - padding * 1.5, topHeight);
-        }
-        
-        // Position plots panel
-        if (plotsPanel) {
-            plotsPanel->resize(x() + padding, y() + topHeight + 2 * padding, 
-                             w - 2 * padding, bottomHeight);
+    // Position UI components
+    LOG_DEBUG("Positioning UI components", "ResultsView");
+    if (statisticsPanel) {
+        statisticsPanel->resize(10, 10, w/3 - 20, h/2 - 20);
+    }
+    if (parametersPanel) {
+        parametersPanel->resize(w/3 + 10, 10, w/3 - 20, h/2 - 20);
+    }
+    if (plotsPanel) {
+        plotsPanel->resize(2*w/3 + 10, 10, w/3 - 20, h/2 - 20);
+    }
+    
+    // Initialize PlottingUtility if needed
+    if (!plottingInitialized && model && plotsPanel) {
+        LOG_INFO("Initializing PlottingUtility", "ResultsView");
+        bool initSuccess = PlottingUtility::getInstance().initialize(plotsPanel);
+        if (initSuccess) {
+            plottingInitialized = true;
+            LOG_INFO("PlottingUtility initialized successfully", "ResultsView");
             
-            // Position the export button in the bottom right of the plots panel
-            if (exportButton) {
-                exportButton->resize(plotsPanel->x() + plotsPanel->w() - 110, 
-                                   plotsPanel->y() + plotsPanel->h() - 40,
-                                   100, 30);
-            }
-        }
-        
-        // Create plots if model is set and plotting is initialized
-        if (model && plottingInitialized) {
-            LOG_DEBUG("Model is set and plotting is initialized, creating plots", "ResultsView");
-            try {
-                createPlots();
-                LOG_INFO("Plots created successfully", "ResultsView");
-            } catch (const std::exception& e) {
-                LOG_ERR("Failed to create plots: " + std::string(e.what()), "ResultsView");
-                drawFallbackPlotDisplay();
-            } catch (...) {
-                LOG_ERR("Unknown error creating plots", "ResultsView");
-                drawFallbackPlotDisplay();
-            }
+            // Create plots
+            LOG_INFO("Creating plots for model", "ResultsView");
+            createPlots();
         } else {
-            if (!model) {
-                LOG_ERR("No model available for plotting", "ResultsView");
-            }
-            if (!plottingInitialized) {
-                LOG_ERR("PlottingUtility not initialized", "ResultsView");
-            }
-            drawFallbackPlotDisplay();
+            LOG_ERR("Failed to initialize PlottingUtility", "ResultsView");
         }
-    } catch (const std::exception& e) {
-        LOG_ERR("Exception in ResultsView::layout(): " + std::string(e.what()), "ResultsView");
-        drawFallbackPlotDisplay();
-    } catch (...) {
-        LOG_ERR("Unknown exception in ResultsView::layout()", "ResultsView");
-        drawFallbackPlotDisplay();
     }
     
     LOG_INFO("ResultsView::layout() completed", "ResultsView");
@@ -208,13 +157,26 @@ void ResultsView::layout() {
 void ResultsView::draw() {
     LOG_DEBUG("ResultsView::draw called", "ResultsView");
     
-    // Draw the regular Fl_Group elements first
+    // Call parent's draw method first
     Fl_Group::draw();
     
-    // No need to render plots here, as they are drawn by the PlottingUtility
-    // during the render() calls in createPlots.
+    // Render plots if initialized
+    if (plottingInitialized) {
+        PlottingUtility::getInstance().render();
+    }
     
     LOG_DEBUG("ResultsView::draw completed", "ResultsView");
+}
+
+void ResultsView::render() {
+    if (plottingInitialized) {
+        try {
+            PlottingUtility::getInstance().render();
+            LOG_DEBUG("Plots rendered in render()", "ResultsView");
+        } catch (const std::exception& e) {
+            LOG_ERR("Error in render(): " + std::string(e.what()), "ResultsView");
+        }
+    }
 }
 
 // Helper method to draw a simple fallback when plotting fails
