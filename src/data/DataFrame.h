@@ -52,7 +52,7 @@ public:
      * 
      * @return size_t Number of rows
      */
-    size_t rowCount() const;
+    size_t getNumRows() const { return rows; }
 
     /**
      * @brief Get number of columns in the data frame
@@ -78,6 +78,39 @@ public:
      * @return DataFrame Subset of the data frame
      */
     DataFrame subset(size_t start, size_t end) const;
+
+    /**
+     * @brief Get value at specific row and column index
+     * 
+     * @param row Row index
+     * @param col Column index
+     * @return double Value at the specified position
+     */
+    double getValue(size_t row, size_t col) const {
+        if (col >= columnOrder.size()) {
+            throw std::out_of_range("Column index out of range");
+        }
+        const std::string& colName = columnOrder[col];
+        if (row >= data.at(colName).size()) {
+            throw std::out_of_range("Row index out of range");
+        }
+        return data.at(colName)[row];
+    }
+
+    /**
+     * @brief Get column index by name
+     * 
+     * @param name Column name
+     * @return int Column index, or -1 if not found
+     */
+    int getColumnIndex(const std::string& name) const {
+        for (size_t i = 0; i < columnOrder.size(); ++i) {
+            if (columnOrder[i] == name) {
+                return static_cast<int>(i);
+            }
+        }
+        return -1;
+    }
 
 private:
     std::unordered_map<std::string, std::vector<double>> data;

@@ -9,12 +9,11 @@ Usage:
     Called from the C++ application with appropriate arguments.
     
 Arguments:
-    --data_file: Path to CSV file containing the data
+    --data_file: Path to CSV file containing the original data
+    --model_file: Path to CSV file containing the model predictions
     --output_file: Path to save the plot
-    --plot_type: Type of plot to generate (scatter, timeseries, importance)
-    --actual_col: Name of the actual values column
-    --predicted_col: Name of the predicted values column
-    --features: List of feature names and their importance scores (for importance plot)
+    --x_column: Name of the X column
+    --y_column: Name of the Y column
     --title: Plot title
 """
 
@@ -26,13 +25,13 @@ import os
 import sys
 import json
 
-def create_scatter_plot(data, actual_col, predicted_col, title, output_file):
+def create_scatter_plot(data, model_data, x_column, y_column, title, output_file):
     """Create scatter plot of actual vs predicted values."""
     plt.figure(figsize=(10, 6))
     
     # Get actual and predicted values
-    actual = data[actual_col]
-    predicted = data[predicted_col]
+    actual = data[y_column]
+    predicted = model_data['predicted']
     
     # Create scatter plot
     plt.scatter(actual, predicted, alpha=0.6, label='Data Points')
@@ -43,8 +42,8 @@ def create_scatter_plot(data, actual_col, predicted_col, title, output_file):
     plt.plot([min_val, max_val], [min_val, max_val], 'r--', label='Perfect Prediction')
     
     # Add labels and title
-    plt.xlabel('Actual Values')
-    plt.ylabel('Predicted Values')
+    plt.xlabel(x_column)
+    plt.ylabel(y_column)
     plt.title(title)
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.7)
@@ -104,13 +103,11 @@ def create_importance_plot(features_json, title, output_file):
 
 def main():
     parser = argparse.ArgumentParser(description='Generate regression model plots')
-    parser.add_argument('--data_file', help='Path to CSV file containing the data')
+    parser.add_argument('--data_file', required=True, help='Path to CSV file containing the original data')
+    parser.add_argument('--model_file', required=True, help='Path to CSV file containing the model predictions')
     parser.add_argument('--output_file', required=True, help='Path to save the plot')
-    parser.add_argument('--plot_type', required=True, choices=['scatter', 'timeseries', 'importance'],
-                      help='Type of plot to generate')
-    parser.add_argument('--actual_col', help='Name of the actual values column')
-    parser.add_argument('--predicted_col', help='Name of the predicted values column')
-    parser.add_argument('--features', help='JSON string of feature names and importance scores')
+    parser.add_argument('--x_column', required=True, help='Name of the X column')
+    parser.add_argument('--y_column', required=True, help='Name of the Y column')
     parser.add_argument('--title', default='Regression Results', help='Plot title')
     
     args = parser.parse_args()
@@ -119,22 +116,12 @@ def main():
         # Create output directory if it doesn't exist
         os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
         
-        if args.plot_type in ['scatter', 'timeseries']:
-            if not args.data_file or not args.actual_col or not args.predicted_col:
-                raise ValueError("Data file and column names are required for scatter and timeseries plots")
-            
-            # Load data
-            data = pd.read_csv(args.data_file)
-            
-            if args.plot_type == 'scatter':
-                create_scatter_plot(data, args.actual_col, args.predicted_col, args.title, args.output_file)
-            else:  # timeseries
-                create_timeseries_plot(data, args.actual_col, args.predicted_col, args.title, args.output_file)
+        # Load data
+        data = pd.read_csv(args.data_file)
+        model_data = pd.read_csv(args.model_file)
         
-        elif args.plot_type == 'importance':
-            if not args.features:
-                raise ValueError("Feature importance data is required for importance plot")
-            create_importance_plot(args.features, args.title, args.output_file)
+        # Create scatter plot
+        create_scatter_plot(data, model_data, args.x_column, args.y_column, args.title, args.output_file)
         
         print(f"Plot saved as: {os.path.abspath(args.output_file)}")
         sys.exit(0)

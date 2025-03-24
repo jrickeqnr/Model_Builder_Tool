@@ -16,6 +16,7 @@
 #include "models/Model.h"
 #include "gui/ExportDialog.h"
 #include "gui/DataTable.h"
+#include "utils/PlottingUtility.h"
 
 // Forward declarations
 class PlotWidget;
@@ -206,7 +207,7 @@ private:
  * 
  * This class provides functionality for creating plots using matplotlib-cpp.
  */
-class PlotWidget : public Fl_Group {
+class PlotWidget : public Fl_Group, public PlottingUtility {
 public:
     PlotWidget(int x, int y, int w, int h);
     ~PlotWidget();
@@ -367,21 +368,19 @@ private:
     };
 
     // Storage for plot image
-    char* plotImageData = nullptr;
-    int plotImageWidth = 0;
-    int plotImageHeight = 0;
-    
-    // Box for displaying the plot
-    Fl_Box* plotBox = nullptr;
+    Fl_Box* plotBox;
+    char* plotImageData;
+    int plotImageWidth;
+    int plotImageHeight;
     
     // Resize handling
-    bool resizeTimerActive = false;
-    int pendingWidth = 0;
-    int pendingHeight = 0;
-    static constexpr double RESIZE_DELAY = 0.2; // seconds
+    bool resizeTimerActive;
+    int pendingWidth;
+    int pendingHeight;
+    static const double RESIZE_DELAY;  // Delay in seconds before regenerating plot after resize
 
     // Current plot type
-    PlotType currentPlotType = PlotType::None;
+    PlotType currentPlotType;
 
     // Stored data for regeneration
     std::vector<double> storedActualValues;
@@ -401,4 +400,6 @@ private:
     
     // For tree visualization
     std::string storedTreeStructure;
+
+    std::unordered_map<std::string, std::string> tempFilePaths;  // Store full paths of temporary files
 };

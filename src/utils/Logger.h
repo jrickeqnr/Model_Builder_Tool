@@ -8,12 +8,15 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <filesystem>
+#include <windows.h>
+#include <shlobj.h>  // For SHGetFolderPathA and CSIDL_LOCAL_APPDATA
 
 enum class LogLevel {
     DEBUG,
     INFO,
     WARNING,
-    ERROR,
+    ERR,
     FATAL
 };
 
@@ -45,7 +48,7 @@ public:
     }
 
     void error(const std::string& message, const std::string& component = "") {
-        log(LogLevel::ERROR, message, component);
+        log(LogLevel::ERR, message, component);
     }
 
     void fatal(const std::string& message, const std::string& component = "") {
@@ -62,12 +65,29 @@ public:
         std::ofstream logFile;
         static bool firstLog = true;
 
-        if (firstLog) {
-            // Clear log file on first use
-            logFile.open("application.log", std::ios::out | std::ios::trunc);
-            firstLog = false;
+        // Get the application data directory for Windows
+        char appDataPath[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, appDataPath))) {
+            std::filesystem::path logDir = std::filesystem::path(appDataPath) / "Model_Builder_Tool" / "logs";
+            std::filesystem::create_directories(logDir);
+            
+            std::filesystem::path logPath = logDir / "application.log";
+            
+            if (firstLog) {
+                // Clear log file on first use
+                logFile.open(logPath, std::ios::out | std::ios::trunc);
+                firstLog = false;
+            } else {
+                // Append to log file
+                logFile.open(logPath, std::ios::app);
+            }
+
+            if (!logFile.is_open()) {
+                // Fallback to current directory if app data path fails
+                logFile.open("application.log", std::ios::app);
+            }
         } else {
-            // Append to log file
+            // Fallback to current directory if app data path fails
             logFile.open("application.log", std::ios::app);
         }
 
@@ -90,7 +110,7 @@ public:
             case LogLevel::DEBUG:   levelStr = "DEBUG"; break;
             case LogLevel::INFO:    levelStr = "INFO"; break;
             case LogLevel::WARNING: levelStr = "WARNING"; break;
-            case LogLevel::ERROR:   levelStr = "ERROR"; break;
+            case LogLevel::ERR:   levelStr = "ERROR"; break;
             case LogLevel::FATAL:   levelStr = "FATAL"; break;
             default:                levelStr = "UNKNOWN";
         }
@@ -106,7 +126,14 @@ public:
     }
 
 private:
-    Logger() : m_logLevel(LogLevel::DEBUG) {}
+    Logger() : m_logLevel(LogLevel::DEBUG) {
+        // Initialize logging directory on construction
+        char appDataPath[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, appDataPath))) {
+            std::filesystem::path logDir = std::filesystem::path(appDataPath) / "Model_Builder_Tool" / "logs";
+            std::filesystem::create_directories(logDir);
+        }
+    }
     ~Logger() = default;
     Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
@@ -118,5 +145,5 @@ private:
 #define LOG_DEBUG(message, component) Logger::getInstance().debug(message, component)
 #define LOG_INFO(message, component) Logger::getInstance().info(message, component)
 #define LOG_WARN(message, component) Logger::getInstance().warn(message, component)
-#define LOG_ERROR(message, component) Logger::getInstance().error(message, component)
+#define LOG_ERR(message, component) Logger::getInstance().error(message, component)
 #define LOG_FATAL(message, component) Logger::getInstance().fatal(message, component) 

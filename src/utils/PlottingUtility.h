@@ -7,6 +7,9 @@
 #include <iostream>
 #include <filesystem>
 #include <cstdlib>
+#include <chrono>
+#include <windows.h>
+#include <shlobj.h>  // For SHGetFolderPathA and CSIDL_LOCAL_APPDATA
 
 #include <Eigen/Dense>
 #include "data/DataFrame.h"
@@ -36,11 +39,18 @@ public:
         const std::string& title = "Linear Regression Results") 
     {
         try {
-            // Create temporary directory if it doesn't exist
-            fs::path tempDir = fs::temp_directory_path() / "linear_regression_tool";
-            if (!fs::exists(tempDir)) {
-                fs::create_directories(tempDir);
+            // Get Windows temp directory
+            char tempPath[MAX_PATH];
+            if (GetTempPathA(MAX_PATH, tempPath) == 0) {
+                std::cerr << "Error: Failed to get temp directory" << std::endl;
+                return "";
             }
+
+            // Create a unique subdirectory for our temporary files
+            std::string uniqueDir = std::to_string(GetCurrentProcessId()) + "_" + 
+                                  std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+            fs::path tempDir = fs::path(tempPath) / "Model_Builder_Tool" / uniqueDir;
+            fs::create_directories(tempDir);
             
             // Create paths for temporary files
             fs::path dataFile = tempDir / "data.csv";
@@ -60,7 +70,7 @@ public:
                 return "";
             }
             
-            // Build the command to run the Python script
+            // Build the command to run the Python script with proper path handling
             std::stringstream cmd;
             cmd << "python \"" << scriptPath.string() << "\"";
             cmd << " --data_file \"" << dataFile.string() << "\"";
@@ -79,16 +89,72 @@ public:
             
             // Check if the output file was created
             if (!fs::exists(outputFile)) {
-                std::cerr << "Error: Plot file was not created" << std::endl;
+                std::cerr << "Error: Output file was not created: " << outputFile << std::endl;
                 return "";
             }
             
-            return outputFile.string();
+            // Read the generated image
+            std::ifstream file(outputFile, std::ios::binary);
+            if (!file) {
+                std::cerr << "Error: Failed to read output file: " << outputFile << std::endl;
+                return "";
+            }
+            
+            std::stringstream buffer;
+            buffer << file.rdbuf();
+            file.close();
+            
+            // Clean up temporary files
+            try {
+                fs::remove_all(tempDir);
+            } catch (const fs::filesystem_error& e) {
+                std::cerr << "Warning: Failed to clean up temporary files: " << e.what() << std::endl;
+            }
+            
+            return buffer.str();
         }
         catch (const std::exception& e) {
-            std::cerr << "Error generating plot: " << e.what() << std::endl;
+            std::cerr << "Error creating plot: " << e.what() << std::endl;
             return "";
         }
+    }
+
+    /**
+     * @brief Get the path to the plotting script
+     * 
+     * @return fs::path Path to the plotting script
+     */
+    static fs::path getPlottingScriptPath() {
+        // Try several possible locations
+        std::vector<fs::path> possiblePaths = {
+            // Current directory
+            fs::path("plot_regression.py"),
+            
+            // plotting_scripts directory in current directory
+            fs::path("plotting_scripts") / "plot_regression.py",
+            
+            // plotting_scripts directory in the executable directory
+            fs::path(getExecutableDir()) / "plotting_scripts" / "plot_regression.py",
+            
+            // Direct path based on build directory structure
+            fs::path(getExecutableDir()) / ".." / ".." / "src" / "plotting_scripts" / "plot_regression.py",
+            
+            // AppData directory
+            fs::path(getAppDataDir()) / "Model_Builder_Tool" / "plotting_scripts" / "plot_regression.py"
+        };
+        
+        for (const auto& path : possiblePaths) {
+            if (fs::exists(path)) {
+                return fs::absolute(path);
+            }
+        }
+        
+        std::cerr << "Warning: Could not find plot_regression.py in any of the expected locations" << std::endl;
+        std::cerr << "Executable directory: " << getExecutableDir() << std::endl;
+        std::cerr << "Current directory: " << fs::current_path() << std::endl;
+        std::cerr << "AppData directory: " << getAppDataDir() << std::endl;
+        
+        return fs::path();
     }
 
 private:
@@ -183,54 +249,21 @@ private:
     }
     
     /**
-     * @brief Get the path to the plotting script
-     * 
-     * @return fs::path Path to the plotting script
-     */
-    static fs::path getPlottingScriptPath() {
-        // Try several possible locations
-        std::vector<fs::path> possiblePaths = {
-            // Current directory
-            fs::path("plot_regression.py"),
-            
-            // plotting_scripts directory in current directory
-            fs::path("plotting_scripts") / "plot_regression.py",
-            
-            // plotting_scripts directory in the executable directory
-            fs::path(getExecutableDir()) / "plotting_scripts" / "plot_regression.py",
-            
-            // Direct path based on build directory structure
-            fs::path(getExecutableDir()) / ".." / ".." / "src" / "plotting_scripts" / "plot_regression.py"
-        };
-        
-        for (const auto& path : possiblePaths) {
-            if (fs::exists(path)) {
-                return fs::absolute(path);
-            }
-        }
-        
-        std::cerr << "Warning: Could not find plot_regression.py in any of the expected locations" << std::endl;
-        std::cerr << "Executable directory: " << getExecutableDir() << std::endl;
-        std::cerr << "Current directory: " << fs::current_path() << std::endl;
-        
-        return fs::path();
-    }
-    
-    /**
      * @brief Get the directory of the currently running executable
      * 
      * @return std::string Directory path
      */
     static std::string getExecutableDir() {
-        char buffer[1024];
-    #ifdef _WIN32
+        char buffer[MAX_PATH];
         GetModuleFileNameA(NULL, buffer, sizeof(buffer));
-    #else
-        ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
-        if (len != -1) {
-            buffer[len] = '\0';
-        }
-    #endif
         return fs::path(buffer).parent_path().string();
+    }
+
+    static std::string getAppDataDir() {
+        char buffer[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, buffer))) {
+            return std::string(buffer);
+        }
+        return "";
     }
 };

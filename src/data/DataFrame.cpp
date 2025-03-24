@@ -8,9 +8,9 @@ void DataFrame::addColumn(const std::string& name, const std::vector<double>& da
     }
 
     // Check if data size is consistent with existing columns
-    if (!this->data.empty() && data.size() != rows) {
+    if (!this->data.empty() && data.size() != getNumRows()) {
         throw std::invalid_argument("Column '" + name + "' has " + std::to_string(data.size()) + 
-                                   " rows, but DataFrame has " + std::to_string(rows) + " rows");
+                                   " rows, but DataFrame has " + std::to_string(getNumRows()) + " rows");
     }
 
     // If this is the first column, set the row count
@@ -37,7 +37,7 @@ Eigen::MatrixXd DataFrame::toMatrix(const std::vector<std::string>& columnNames)
     }
 
     // Create a matrix with rows x columns
-    Eigen::MatrixXd matrix(rows, columnNames.size());
+    Eigen::MatrixXd matrix(getNumRows(), columnNames.size());
     
     // Fill the matrix column by column
     for (size_t col = 0; col < columnNames.size(); ++col) {
@@ -48,7 +48,7 @@ Eigen::MatrixXd DataFrame::toMatrix(const std::vector<std::string>& columnNames)
         }
 
         const auto& columnData = it->second;
-        for (size_t row = 0; row < rows; ++row) {
+        for (size_t row = 0; row < getNumRows(); ++row) {
             matrix(row, col) = columnData[row];
         }
     }
@@ -60,10 +60,6 @@ std::vector<std::string> DataFrame::getColumnNames() const {
     return columnOrder;
 }
 
-size_t DataFrame::rowCount() const {
-    return rows;
-}
-
 size_t DataFrame::columnCount() const {
     return data.size();
 }
@@ -73,7 +69,7 @@ bool DataFrame::hasColumn(const std::string& name) const {
 }
 
 DataFrame DataFrame::subset(size_t start, size_t end) const {
-    if (start >= rows || end > rows || start >= end) {
+    if (start >= getNumRows() || end > getNumRows() || start >= end) {
         throw std::out_of_range("Invalid subset range");
     }
 

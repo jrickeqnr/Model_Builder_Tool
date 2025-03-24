@@ -150,7 +150,7 @@ void MainWindow::handleFileSelected(const std::string& filePath) {
         // Update status
         char statusMsg[256];
         snprintf(statusMsg, sizeof(statusMsg), "CSV file loaded successfully: %zu rows, %zu columns", 
-                dataFrame->rowCount(), dataFrame->columnCount());
+                dataFrame->getNumRows(), dataFrame->columnCount());
         statusBar->copy_label(statusMsg);
         LOG_INFO(statusMsg, "MainWindow");
         
@@ -158,7 +158,7 @@ void MainWindow::handleFileSelected(const std::string& filePath) {
         currentState = State::ModelSelection;
         updateUI();
     } catch (const std::exception& e) {
-        LOG_ERROR("Failed to load CSV file: " + std::string(e.what()), "MainWindow");
+        LOG_ERR("Failed to load CSV file: " + std::string(e.what()), "MainWindow");
         fl_alert("Failed to load CSV file: %s", e.what());
         statusBar->copy_label("Failed to load CSV file");
     }
@@ -178,9 +178,9 @@ void MainWindow::handleModelSelected(const std::string& modelType) {
             hyperparameterSelector->setModelType(modelType);
             LOG_INFO("Model type set successfully", "MainWindow");
         } catch (const std::exception& e) {
-            LOG_ERROR("Exception when setting model type: " + std::string(e.what()), "MainWindow");
+            LOG_ERR("Exception when setting model type: " + std::string(e.what()), "MainWindow");
         } catch (...) {
-            LOG_ERROR("Unknown exception when setting model type", "MainWindow");
+            LOG_ERR("Unknown exception when setting model type", "MainWindow");
         }
     } else {
         // Linear Regression has no hyperparameters, skip to variable selection
@@ -430,7 +430,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                         tol = std::stod(currentHyperparameters.at("tol"));
                     }
                 } catch (const std::exception& e) {
-                    LOG_ERROR("Error parsing ElasticNet hyperparameters: " + std::string(e.what()), "MainWindow");
+                    LOG_ERR("Error parsing ElasticNet hyperparameters: " + std::string(e.what()), "MainWindow");
                 }
             }
 
@@ -483,7 +483,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                         gamma = std::stod(currentHyperparameters.at("gamma"));
                     }
                 } catch (const std::exception& e) {
-                    LOG_ERROR("Error parsing XGBoost hyperparameters: " + std::string(e.what()), "MainWindow");
+                    LOG_ERR("Error parsing XGBoost hyperparameters: " + std::string(e.what()), "MainWindow");
                 }
             }
 
@@ -535,7 +535,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                         bootstrap = (currentHyperparameters.at("bootstrap") == "true");
                     }
                 } catch (const std::exception& e) {
-                    LOG_ERROR("Error parsing Random Forest hyperparameters: " + std::string(e.what()), "MainWindow");
+                    LOG_ERR("Error parsing Random Forest hyperparameters: " + std::string(e.what()), "MainWindow");
                 }
             }
 
@@ -599,7 +599,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                         alpha = std::stod(currentHyperparameters.at("alpha"));
                     }
                 } catch (const std::exception& e) {
-                    LOG_ERROR("Error parsing Neural Network hyperparameters: " + std::string(e.what()), "MainWindow");
+                    LOG_ERR("Error parsing Neural Network hyperparameters: " + std::string(e.what()), "MainWindow");
                 }
             }
 
@@ -667,7 +667,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                         loss = currentHyperparameters.at("loss");
                     }
                 } catch (const std::exception& e) {
-                    LOG_ERROR("Error parsing Gradient Boosting hyperparameters: " + std::string(e.what()), "MainWindow");
+                    LOG_ERR("Error parsing Gradient Boosting hyperparameters: " + std::string(e.what()), "MainWindow");
                 }
             }
 
@@ -684,7 +684,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                                                       min_samples_leaf, subsample, loss);
         }
         else {
-            LOG_ERROR("Unknown model type: " + modelType, "MainWindow");
+            LOG_ERR("Unknown model type: " + modelType, "MainWindow");
             fl_alert("Unknown model type selected. Please try again.");
             return nullptr;
         }
@@ -692,12 +692,12 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
         if (result) {
             LOG_INFO("Model created successfully", "MainWindow");
         } else {
-            LOG_ERROR("Failed to create model", "MainWindow");
+            LOG_ERR("Failed to create model", "MainWindow");
         }
     } catch (const std::exception& e) {
-        LOG_ERROR("Exception creating model: " + std::string(e.what()), "MainWindow");
+        LOG_ERR("Exception creating model: " + std::string(e.what()), "MainWindow");
     } catch (...) {
-        LOG_ERROR("Unknown exception creating model", "MainWindow");
+        LOG_ERR("Unknown exception creating model", "MainWindow");
     }
     
     return result;
@@ -709,7 +709,7 @@ void MainWindow::menuCallback(Fl_Widget* widget, void* userData) {
         const char* action = static_cast<const char*>(userData);
         
         if (!window) {
-            LOG_ERROR("Null window pointer in menu callback", "MainWindow");
+            LOG_ERR("Null window pointer in menu callback", "MainWindow");
             return;
         }
         
@@ -724,8 +724,8 @@ void MainWindow::menuCallback(Fl_Widget* widget, void* userData) {
                       "A simple tool for performing linear regression analysis on CSV data.");
         }
     } catch (const std::exception& e) {
-        LOG_ERROR("Exception in menu callback: " + std::string(e.what()), "MainWindow");
+        LOG_ERR("Exception in menu callback: " + std::string(e.what()), "MainWindow");
     } catch (...) {
-        LOG_ERROR("Unknown exception in menu callback", "MainWindow");
+        LOG_ERR("Unknown exception in menu callback", "MainWindow");
     }
 }

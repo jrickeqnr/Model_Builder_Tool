@@ -45,6 +45,7 @@ _deps
 
 # IDE - VSCode/Cursor
 .vscode/*
+.cursor/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
@@ -97,3 +98,10 @@ yarn.lock
 # Documentation
 /docs/_build/
 /site/
+
+# Windows AppData
+%LOCALAPPDATA%/Model_Builder_Tool/
+%APPDATA%/Model_Builder_Tool/
+
+# Windows Temp files
+%TEMP%/Model_Builder_Tool/
