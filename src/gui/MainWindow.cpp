@@ -22,7 +22,7 @@
 #include "models/GradientBoosting.h"
 
 // Include utilities
-#include "util/Logger.h"
+#include "utils/Logger.h"
 
 // Define the menu items
 static Fl_Menu_Item menuItems[] = {

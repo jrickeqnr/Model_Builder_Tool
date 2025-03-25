@@ -1,7 +1,7 @@
 #include <FL/Fl.H>
 #include <FL/Fl_Window.H>
 #include "gui/MainWindow.h"
-#include "util/Logger.h"
+#include "utils/Logger.h"
 
 int main(int argc, char *argv[]) {
     // Initialize logging

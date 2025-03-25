@@ -1,6 +1,6 @@
 #include <iostream>
 #include "gui/ResultsView.h"
-#include "util/Logger.h"
+#include "utils/Logger.h"
 #include <FL/Fl.H>
 #include <FL/Fl_Group.H>
 #include <FL/Fl_Box.H>
