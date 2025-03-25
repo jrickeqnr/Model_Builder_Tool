@@ -437,10 +437,30 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                                              subsample, colsample_bytree, min_child_weight, gamma);
         }
         else if (modelType == "Random Forest") {
-            // TODO: Implement Random Forest model
-            LOG_ERR("Random Forest model not yet implemented", "MainWindow");
-            fl_alert("Random Forest model is not yet implemented. Please select a different model type.");
-            return nullptr;
+            // Create Random Forest with selected hyperparameters
+            int n_estimators = 100;  // Default
+            int max_depth = 10;
+            int min_samples_split = 2;
+            int min_samples_leaf = 1;
+            std::string max_features = "auto";
+            bool bootstrap = true;
+
+            // Parse hyperparameters if they exist
+            if (!currentHyperparameters.empty()) {
+                try {
+                    n_estimators = std::stoi(currentHyperparameters.at("n_estimators"));
+                    max_depth = std::stoi(currentHyperparameters.at("max_depth"));
+                    min_samples_split = std::stoi(currentHyperparameters.at("min_samples_split"));
+                    min_samples_leaf = std::stoi(currentHyperparameters.at("min_samples_leaf"));
+                    max_features = currentHyperparameters.at("max_features");
+                    bootstrap = currentHyperparameters.at("bootstrap") == "true";
+                } catch (const std::exception& e) {
+                    LOG_ERR("Error parsing Random Forest hyperparameters: " + std::string(e.what()), "MainWindow");
+                }
+            }
+
+            return std::make_unique<RandomForest>(n_estimators, max_depth, min_samples_split,
+                                                min_samples_leaf, max_features, bootstrap);
         }
         else if (modelType == "Neural Network") {
             // Create Neural Network with selected hyperparameters
