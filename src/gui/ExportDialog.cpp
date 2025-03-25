@@ -9,6 +9,10 @@ ExportDialog::ExportDialog(int w, int h, const char* title)
 {
     begin();
 
+    // Set window properties
+    set_modal();  // Make it modal
+    position(Fl::w()/2 - w/2, Fl::h()/2 - h/2);  // Center the window
+
     int padding = 10;
     int checkboxWidth = w - 2 * padding;
     int checkboxHeight = 25;

@@ -989,7 +989,7 @@ bool PlotNavigator::savePlotToFile(size_t index, const std::string& filename) {
 // ResultsView implementation
 ResultsView::ResultsView(int x, int y, int w, int h)
     : Fl_Group(x, y, w, h),
-      exportDialog(std::make_unique<ExportDialog>(400, 300, "Export Options"))
+      exportDialog(nullptr)  // Initialize to nullptr first
 {
     begin();
     
@@ -1017,11 +1017,11 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     modelSubtitleLabel->labelfont(FL_ITALIC);
     
     // Create equation display box (moved down by subtitleHeight)
-    Fl_Box* equationLabel = new Fl_Box(x + margin, y + margin + headerHeight + subtitleHeight + 5, 
-                                      w - 2*margin, equationHeight, "Regression Equation:");
-    equationLabel->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
-    equationLabel->labelsize(14);
-    equationLabel->labelfont(FL_BOLD);
+    equationBox = new Fl_Box(x + margin, y + margin + headerHeight + subtitleHeight + 5, 
+                            w - 2*margin, equationHeight, "Regression Equation:");
+    equationBox->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+    equationBox->labelsize(14);
+    equationBox->labelfont(FL_BOLD);
     
     equationDisplay = new Fl_Box(x + margin + 20, y + margin + headerHeight + subtitleHeight + 30, 
                                 w - 2*margin - 40, equationHeight - 20, "");
@@ -1078,7 +1078,8 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     
     end();
 
-    // Initialize the export dialog
+    // Create the export dialog after all other widgets are initialized
+    exportDialog = std::make_unique<ExportDialog>(400, 300, "Export Options");
     exportDialog->onExport = [this](const ExportDialog::ExportOptions& options) {
         exportResults(options);
     };
