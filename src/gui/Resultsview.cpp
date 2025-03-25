@@ -991,6 +991,11 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     : Fl_Group(x, y, w, h),
       exportDialog(nullptr)  // Initialize to nullptr first
 {
+    // Debug breakpoint 1: Start of constructor
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
+
     begin();
     
     // Set group properties
@@ -1004,6 +1009,11 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     int equationHeight = 60;
     int subtitleHeight = 25;  // Height for the model type subtitle
     
+    // Debug breakpoint 2: After basic setup
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
+
     // Create title label
     modelTitleLabel = new Fl_Box(x + margin, y + margin, w - 2*margin, headerHeight, "Model Results");
     modelTitleLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
@@ -1016,6 +1026,11 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     modelSubtitleLabel->labelsize(14);
     modelSubtitleLabel->labelfont(FL_ITALIC);
     
+    // Debug breakpoint 3: After labels
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
+
     // Create equation display box (moved down by subtitleHeight)
     equationBox = new Fl_Box(x + margin, y + margin + headerHeight + subtitleHeight + 5, 
                             w - 2*margin, equationHeight, "Regression Equation:");
@@ -1029,6 +1044,11 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     equationDisplay->labelsize(14);
     equationDisplay->box(FL_BORDER_BOX);
     
+    // Debug breakpoint 4: After equation display
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
+
     // Create main display area (moved down by subtitleHeight)
     int contentY = y + margin + headerHeight + subtitleHeight + equationHeight + 15;
     int contentHeight = h - margin*2 - headerHeight - subtitleHeight - equationHeight - 15 - bottomButtonsHeight - 10;
@@ -1049,6 +1069,11 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     
     parametersGroup->end();
     
+    // Debug breakpoint 5: After parameters group
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
+
     // Statistics group (left side, bottom half)
     statisticsGroup = new Fl_Group(x + margin, contentY + contentHeight/2 + 10, tableWidth, contentHeight/2 - 10);
     statisticsGroup->box(FL_BORDER_BOX);
@@ -1064,6 +1089,11 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     
     statisticsGroup->end();
     
+    // Debug breakpoint 6: After statistics group
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
+
     // Plot navigator (right side)
     plotNavigator = new PlotNavigator(x + margin*2 + tableWidth, contentY, tableWidth, contentHeight);
     
@@ -1078,11 +1108,21 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     
     end();
 
+    // Debug breakpoint 7: Before export dialog creation
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
+
     // Create the export dialog after all other widgets are initialized
     exportDialog = std::make_unique<ExportDialog>(400, 300, "Export Options");
     exportDialog->onExport = [this](const ExportDialog::ExportOptions& options) {
         exportResults(options);
     };
+
+    // Debug breakpoint 8: After export dialog creation
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
 }
 
 ResultsView::~ResultsView() {

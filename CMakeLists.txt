@@ -1,8 +1,17 @@
 cmake_minimum_required(VERSION 3.15)
 project(LinearRegressionTool VERSION 1.0.0 LANGUAGES CXX)
 
+# Force 64-bit build
+set(CMAKE_GENERATOR_PLATFORM x64)
+set(CMAKE_VS_PLATFORM_TOOLSET "v143")
+set(CMAKE_VS_PLATFORM "x64")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Enable debug symbols and debug mode
+set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
 
 # Set custom Python paths
 set(PYTHON_ROOT "C:/Users/JRICK/dev/cpython-3.13.2")
@@ -37,6 +46,8 @@ add_compile_definitions(
     _USE_MATH_DEFINES
     NOMINMAX
     Py_ENABLE_SHARED=1
+    _DEBUG  # Enable debug mode
+    WIN64   # Explicitly define 64-bit Windows
 )
 
 # Source files
@@ -63,6 +74,13 @@ set(SOURCES
 # Create executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 
+# Copy Python DLL to output directory
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PYTHON_ROOT}/PCbuild/amd64/python313_d.dll"
+        $<TARGET_FILE_DIR:${PROJECT_NAME}>
+)
+
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${FLTK_LIBRARIES}
@@ -80,3 +98,10 @@ endif()
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE shlwapi)
 endif()
+
+# Print debug information
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ Flags: ${CMAKE_CXX_FLAGS}")
+message(STATUS "Debug Flags: ${CMAKE_CXX_FLAGS_DEBUG}")
+message(STATUS "Platform: ${CMAKE_GENERATOR_PLATFORM}")
+message(STATUS "Toolset: ${CMAKE_VS_PLATFORM_TOOLSET}")

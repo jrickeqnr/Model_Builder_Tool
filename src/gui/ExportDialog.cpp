@@ -7,11 +7,21 @@
 ExportDialog::ExportDialog(int w, int h, const char* title)
     : Fl_Window(w, h, title)
 {
+    // Debug breakpoint 1: Start of constructor
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
+
     begin();
 
     // Set window properties
     set_modal();  // Make it modal
     position(Fl::w()/2 - w/2, Fl::h()/2 - h/2);  // Center the window
+
+    // Debug breakpoint 2: After window setup
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
 
     int padding = 10;
     int checkboxWidth = w - 2 * padding;
@@ -39,6 +49,11 @@ ExportDialog::ExportDialog(int w, int h, const char* title)
     modelSummaryCheck->value(1);
     y += checkboxHeight + padding;
 
+    // Debug breakpoint 3: After checkboxes
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
+
     // Create path selection components
     pathDisplay = new Fl_Box(padding, y, w - 3 * padding - 80, checkboxHeight, "No directory selected");
     pathDisplay->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
@@ -47,6 +62,11 @@ ExportDialog::ExportDialog(int w, int h, const char* title)
     browseButton = new Fl_Button(w - padding - 80, y, 80, checkboxHeight, "Browse");
     browseButton->callback(browseCallback, this);
     y += checkboxHeight + padding;
+
+    // Debug breakpoint 4: After directory selection
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
 
     // Create action buttons
     int buttonWidth = 80;
@@ -60,6 +80,11 @@ ExportDialog::ExportDialog(int w, int h, const char* title)
     cancelButton->callback(cancelCallback, this);
 
     end();
+    
+    // Debug breakpoint 5: End of constructor
+    #ifdef _DEBUG
+    __debugbreak();
+    #endif
 }
 
 ExportDialog::~ExportDialog() {
