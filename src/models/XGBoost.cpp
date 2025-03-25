@@ -116,8 +116,8 @@ bool XGBoost::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y,
         // Calculate feature importance
         calculateFeatureImportance();
         
-        // Calculate RMSE
-        Eigen::VectorXd predictions = predict(X);
+        // Calculate RMSE directly instead of using predict()
+        Eigen::VectorXd predictions = predictAllTrees(X);
         rmse = std::sqrt((predictions - y).array().square().mean());
         
         isFitted = true;

@@ -237,14 +237,42 @@ void MainWindow::fitModelAndShowResults() {
             dataFrame->getColumn(selectedTargetVariable).size()
         );
         
+        // Log data dimensions and basic statistics
+        LOG_INFO("Data dimensions - Samples: " + std::to_string(X.rows()) + 
+                 ", Features: " + std::to_string(X.cols()), "MainWindow");
+        
+        // Check for NaN or infinite values
+        bool hasNaN = X.hasNaN() || y.hasNaN();
+        bool hasInf = !X.allFinite() || !y.allFinite();
+        
+        if (hasNaN) {
+            LOG_ERR("Data contains NaN values", "MainWindow");
+        }
+        if (hasInf) {
+            LOG_ERR("Data contains infinite values", "MainWindow");
+        }
+        
+        // Log data statistics
+        LOG_INFO("Target variable statistics - Mean: " + std::to_string(y.mean()) + 
+                 ", StdDev: " + std::to_string(std::sqrt((y.array() - y.mean()).square().mean())), "MainWindow");
+        
+        // Log feature statistics
+        for (int i = 0; i < X.cols(); ++i) {
+            Eigen::VectorXd feature = X.col(i);
+            LOG_INFO("Feature " + std::to_string(i) + " statistics - Mean: " + std::to_string(feature.mean()) + 
+                     ", StdDev: " + std::to_string(std::sqrt((feature.array() - feature.mean()).square().mean())), "MainWindow");
+        }
+        
         // Fit model
         statusBar->copy_label("Fitting model...");
         Fl::check();  // Update the UI to show the status message
         
         // Pass variable names to the model when fitting
+        LOG_INFO("Attempting to fit " + currentModelType + " model", "MainWindow");
         bool success = model->fit(X, y, selectedInputVariables, selectedTargetVariable);
         
         if (success) {
+            LOG_INFO("Model fitted successfully", "MainWindow");
             // Configure results view based on model type
             configureResultsView();
             
@@ -255,10 +283,12 @@ void MainWindow::fitModelAndShowResults() {
             statusBar->copy_label("Model fitted successfully");
             handleModelFitted();
         } else {
-            fl_alert("Failed to fit model");
+            LOG_ERR("Failed to fit " + currentModelType + " model", "MainWindow");
+            fl_alert("Failed to fit model. Check the logs for details.");
             statusBar->copy_label("Failed to fit model");
         }
     } catch (const std::exception& e) {
+        LOG_ERR("Error fitting model: " + std::string(e.what()), "MainWindow");
         fl_alert("Error fitting model: %s", e.what());
         statusBar->copy_label("Error fitting model");
     }
@@ -403,10 +433,25 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
             result = std::make_shared<LinearRegression>();
         }
         else if (modelType == "ElasticNet") {
-            // TODO: Implement ElasticNet model
-            LOG_ERR("ElasticNet model not yet implemented", "MainWindow");
-            fl_alert("ElasticNet model is not yet implemented. Please select a different model type.");
-            return nullptr;
+            // Create ElasticNet with selected hyperparameters
+            double alpha = 1.0;  // Default
+            double lambda = 1.0;
+            int max_iter = 1000;
+            double tol = 1e-4;
+
+            // Parse hyperparameters if they exist
+            if (!currentHyperparameters.empty()) {
+                try {
+                    alpha = std::stod(currentHyperparameters.at("alpha"));
+                    lambda = std::stod(currentHyperparameters.at("lambda"));
+                    max_iter = std::stoi(currentHyperparameters.at("max_iter"));
+                    tol = std::stod(currentHyperparameters.at("tol"));
+                } catch (const std::exception& e) {
+                    LOG_ERR("Error parsing ElasticNet hyperparameters: " + std::string(e.what()), "MainWindow");
+                }
+            }
+
+            result = std::make_shared<ElasticNet>(alpha, lambda, max_iter, tol);
         }
         else if (modelType == "XGBoost") {
             // Create XGBoost with selected hyperparameters
@@ -459,8 +504,8 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                 }
             }
 
-            return std::make_unique<RandomForest>(n_estimators, max_depth, min_samples_split,
-                                                min_samples_leaf, max_features, bootstrap);
+            result = std::make_shared<RandomForest>(n_estimators, max_depth, min_samples_split,
+                                                  min_samples_leaf, max_features, bootstrap);
         }
         else if (modelType == "Neural Network") {
             // Create Neural Network with selected hyperparameters

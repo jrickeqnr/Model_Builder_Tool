@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(FLTK_DIR "C:/Users/JRICK/Dev/fltk-1.4.2-source/fltk-1.4.2/build")
-set(EIGEN3_INCLUDE_DIR "C:/Users/JRICK/Dev/eigen-3.4.0")
+set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../eigen-3.4.0")
 
 # Find packages
 find_package(FLTK REQUIRED NO_DEFAULT_PATH PATHS ${FLTK_DIR})
@@ -15,7 +15,7 @@ find_package(Python3 COMPONENTS Development NumPy REQUIRED)
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${EIGEN3_INCLUDE_DIR}/Eigen
+    ${EIGEN3_INCLUDE_DIR}
     ${Python3_INCLUDE_DIRS}
     ${Python3_NumPy_INCLUDE_DIRS}
     ${FLTK_INCLUDE_DIRS}

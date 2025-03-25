@@ -1,71 +1,150 @@
-2025-03-25 08:41:33.899 | INFO    | [main] Application starting
-2025-03-25 08:41:33.905 | INFO    | [main] Initializing FLTK
-2025-03-25 08:41:33.913 | INFO    | [main] FLTK initialized
-2025-03-25 08:41:33.917 | INFO    | [main] Creating main window
-2025-03-25 08:41:33.924 | INFO    | [MainWindow] Creating MainWindow
-2025-03-25 08:41:33.929 | INFO    | [MainWindow] Creating FileSelector
-2025-03-25 08:41:33.934 | INFO    | [MainWindow] Creating ModelSelector
-2025-03-25 08:41:33.944 | INFO    | [MainWindow] Creating HyperparameterSelector
-2025-03-25 08:41:33.949 | DEBUG   | [HyperparameterSelector] Creating HyperparameterSelector
-2025-03-25 08:41:33.954 | DEBUG   | [HyperparameterSelector] HyperparameterSelector initialization complete
-2025-03-25 08:41:33.959 | INFO    | [MainWindow] Creating VariableSelector
-2025-03-25 08:41:33.963 | INFO    | [MainWindow] Creating ResultsView
-2025-03-25 08:41:33.969 | INFO    | [MainWindow] Updating UI for state: 0
-2025-03-25 08:41:33.976 | INFO    | [MainWindow] Showing FileSelector
-2025-03-25 08:41:33.981 | INFO    | [MainWindow] UI updated
-2025-03-25 08:41:33.986 | INFO    | [MainWindow] MainWindow created
-2025-03-25 08:41:33.991 | INFO    | [main] Showing main window
-2025-03-25 08:41:34.061 | INFO    | [main] Starting FLTK event loop
-2025-03-25 08:41:53.691 | INFO    | [MainWindow] File selected: C:/Users/JRICK/dev/Model_Builder_Tool/data.csv
-2025-03-25 08:41:53.695 | INFO    | [MainWindow] Reading CSV file
-2025-03-25 08:41:53.925 | INFO    | [MainWindow] CSV file loaded successfully: 117 rows, 66 columns
-2025-03-25 08:41:53.929 | INFO    | [MainWindow] Updating UI for state: 1
-2025-03-25 08:41:53.933 | INFO    | [MainWindow] Showing ModelSelector
-2025-03-25 08:41:53.949 | INFO    | [MainWindow] UI updated
-2025-03-25 08:41:57.274 | INFO    | [MainWindow] Model selected: Random Forest
-2025-03-25 08:41:57.278 | INFO    | [MainWindow] Moving to hyperparameter selection
-2025-03-25 08:41:57.281 | INFO    | [MainWindow] Setting model type on hyperparameter selector: Random Forest
-2025-03-25 08:41:57.284 | DEBUG   | [HyperparameterSelector] Setting model type to: Random Forest
-2025-03-25 08:41:57.288 | DEBUG   | [HyperparameterSelector] Clearing UI
-2025-03-25 08:41:57.291 | DEBUG   | [HyperparameterSelector] UI cleared
-2025-03-25 08:41:57.295 | DEBUG   | [HyperparameterSelector] Building UI for model type: Random Forest
-2025-03-25 08:41:57.299 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: n_estimators
-2025-03-25 08:41:57.302 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: n_estimators
-2025-03-25 08:41:57.307 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: max_depth
-2025-03-25 08:41:57.312 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: max_depth
-2025-03-25 08:41:57.316 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: min_samples_split
-2025-03-25 08:41:57.322 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: min_samples_split
-2025-03-25 08:41:57.327 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: min_samples_leaf
-2025-03-25 08:41:57.332 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: min_samples_leaf
-2025-03-25 08:41:57.336 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: max_features
-2025-03-25 08:41:57.340 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: max_features
-2025-03-25 08:41:57.344 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: bootstrap
-2025-03-25 08:41:57.349 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: bootstrap
-2025-03-25 08:41:57.353 | DEBUG   | [HyperparameterSelector] UI built for model type: Random Forest
-2025-03-25 08:41:57.357 | DEBUG   | [HyperparameterSelector] Model type set and UI rebuilt
-2025-03-25 08:41:57.361 | INFO    | [MainWindow] Model type set successfully
-2025-03-25 08:41:57.365 | INFO    | [MainWindow] Updating UI for state: 2
-2025-03-25 08:41:57.369 | INFO    | [MainWindow] Showing HyperparameterSelector
-2025-03-25 08:41:57.431 | INFO    | [MainWindow] UI updated
-2025-03-25 08:41:58.784 | DEBUG   | [HyperparameterSelector] Next button clicked
-2025-03-25 08:41:58.788 | DEBUG   | [HyperparameterSelector] Collecting parameters
-2025-03-25 08:41:58.791 | DEBUG   | [HyperparameterSelector] Parameter n_estimators = 100 (slider)
-2025-03-25 08:41:58.794 | DEBUG   | [HyperparameterSelector] Parameter max_depth = 10 (slider)
-2025-03-25 08:41:58.797 | DEBUG   | [HyperparameterSelector] Parameter min_samples_split = 2 (slider)
-2025-03-25 08:41:58.801 | DEBUG   | [HyperparameterSelector] Parameter min_samples_leaf = 1 (slider)
-2025-03-25 08:41:58.804 | DEBUG   | [HyperparameterSelector] Parameter max_features = auto (choice)
-2025-03-25 08:41:58.808 | DEBUG   | [HyperparameterSelector] Parameter bootstrap = true (check)
-2025-03-25 08:41:58.811 | DEBUG   | [HyperparameterSelector] Parameter collection complete, collected 6 parameters
-2025-03-25 08:41:58.814 | INFO    | [MainWindow] Hyperparameters selected for model: Random Forest
-2025-03-25 08:41:58.817 | INFO    | [MainWindow]   bootstrap = true
-2025-03-25 08:41:58.822 | INFO    | [MainWindow]   n_estimators = 100
-2025-03-25 08:41:58.825 | INFO    | [MainWindow]   max_depth = 10
-2025-03-25 08:41:58.830 | INFO    | [MainWindow]   min_samples_leaf = 1
-2025-03-25 08:41:58.835 | INFO    | [MainWindow]   min_samples_split = 2
-2025-03-25 08:41:58.839 | INFO    | [MainWindow]   max_features = auto
-2025-03-25 08:41:58.843 | INFO    | [MainWindow] Moving to variable selection
-2025-03-25 08:41:58.848 | INFO    | [MainWindow] Updating UI for state: 3
-2025-03-25 08:41:58.852 | INFO    | [MainWindow] Showing VariableSelector
-2025-03-25 08:41:58.957 | INFO    | [MainWindow] UI updated
-2025-03-25 08:42:03.390 | INFO    | [MainWindow] Creating model of type: Random Forest
-2025-03-25 08:42:09.481 | INFO    | [main] Application exiting with code: 0
+2025-03-25 09:07:45.171 | INFO    | [main] Application starting
+2025-03-25 09:07:45.175 | INFO    | [main] Initializing FLTK
+2025-03-25 09:07:45.177 | INFO    | [main] FLTK initialized
+2025-03-25 09:07:45.178 | INFO    | [main] Creating main window
+2025-03-25 09:07:45.180 | INFO    | [MainWindow] Creating MainWindow
+2025-03-25 09:07:45.182 | INFO    | [MainWindow] Creating FileSelector
+2025-03-25 09:07:45.185 | INFO    | [MainWindow] Creating ModelSelector
+2025-03-25 09:07:45.186 | INFO    | [MainWindow] Creating HyperparameterSelector
+2025-03-25 09:07:45.188 | DEBUG   | [HyperparameterSelector] Creating HyperparameterSelector
+2025-03-25 09:07:45.189 | DEBUG   | [HyperparameterSelector] HyperparameterSelector initialization complete
+2025-03-25 09:07:45.190 | INFO    | [MainWindow] Creating VariableSelector
+2025-03-25 09:07:45.192 | INFO    | [MainWindow] Creating ResultsView
+2025-03-25 09:07:45.194 | INFO    | [MainWindow] Updating UI for state: 0
+2025-03-25 09:07:45.195 | INFO    | [MainWindow] Showing FileSelector
+2025-03-25 09:07:45.197 | INFO    | [MainWindow] UI updated
+2025-03-25 09:07:45.198 | INFO    | [MainWindow] MainWindow created
+2025-03-25 09:07:45.199 | INFO    | [main] Showing main window
+2025-03-25 09:07:45.234 | INFO    | [main] Starting FLTK event loop
+2025-03-25 09:07:49.573 | INFO    | [MainWindow] File selected: C:/Users/JRICK/dev/Model_Builder_Tool/data.csv
+2025-03-25 09:07:49.577 | INFO    | [MainWindow] Reading CSV file
+2025-03-25 09:07:49.653 | INFO    | [MainWindow] CSV file loaded successfully: 117 rows, 66 columns
+2025-03-25 09:07:49.656 | INFO    | [MainWindow] Updating UI for state: 1
+2025-03-25 09:07:49.657 | INFO    | [MainWindow] Showing ModelSelector
+2025-03-25 09:07:49.720 | INFO    | [MainWindow] UI updated
+2025-03-25 09:07:52.005 | INFO    | [MainWindow] Model selected: Linear Regression
+2025-03-25 09:07:52.008 | INFO    | [MainWindow] Skipping hyperparameter selection for Linear Regression
+2025-03-25 09:07:52.010 | INFO    | [MainWindow] Updating UI for state: 3
+2025-03-25 09:07:52.012 | INFO    | [MainWindow] Showing VariableSelector
+2025-03-25 09:07:52.068 | INFO    | [MainWindow] UI updated
+2025-03-25 09:07:58.943 | INFO    | [MainWindow] Creating model of type: Linear Regression
+2025-03-25 09:07:58.947 | INFO    | [MainWindow] Model created successfully
+2025-03-25 09:07:58.949 | INFO    | [MainWindow] Data dimensions - Samples: 117, Features: 3
+2025-03-25 09:07:58.951 | INFO    | [MainWindow] Target variable statistics - Mean: 9006.948718, StdDev: 552.852786
+2025-03-25 09:07:58.953 | INFO    | [MainWindow] Feature 0 statistics - Mean: 15823.376135, StdDev: 1285.257919
+2025-03-25 09:07:58.954 | INFO    | [MainWindow] Feature 1 statistics - Mean: 1.787118, StdDev: 1.859791
+2025-03-25 09:07:58.955 | INFO    | [MainWindow] Feature 2 statistics - Mean: 55.830769, StdDev: 3.743107
+2025-03-25 09:07:58.960 | INFO    | [MainWindow] Attempting to fit Linear Regression model
+2025-03-25 09:07:58.963 | INFO    | [MainWindow] Model fitted successfully
+2025-03-25 09:07:58.964 | INFO    | [MainWindow] Updating UI for state: 4
+2025-03-25 09:07:58.965 | INFO    | [MainWindow] Showing ResultsView
+2025-03-25 09:07:58.978 | INFO    | [MainWindow] UI updated
+2025-03-25 09:07:58.980 | INFO    | [Resultsview] Creating plot of type: scatter
+2025-03-25 09:07:58.981 | INFO    | [Resultsview] Plot dimensions - X: 465, Y: 235, W: 410, H: 330
+2025-03-25 09:07:58.982 | INFO    | [Resultsview] Scatter plot data size - Actual: 117, Predicted: 117
+2025-03-25 09:07:58.984 | INFO    | [Resultsview] Creating scatter plot - Data file: temp_plot_data.csv, Image file: temp_plot_image.png
+2025-03-25 09:07:59.988 | INFO    | [Resultsview] Python script output:
+
+2025-03-25 09:08:00.001 | INFO    | [Resultsview] Adding plot to navigator
+2025-03-25 09:08:00.002 | INFO    | [Resultsview] Plot widget dimensions after add - X: 465, Y: 235, W: 410, H: 330
+2025-03-25 09:08:00.003 | INFO    | [Resultsview] Plot creation completed
+2025-03-25 09:08:00.004 | INFO    | [Resultsview] Creating plot of type: timeseries
+2025-03-25 09:08:00.005 | INFO    | [Resultsview] Plot dimensions - X: 465, Y: 235, W: 410, H: 330
+2025-03-25 09:08:00.006 | INFO    | [Resultsview] Time series plot data size - Actual: 117, Predicted: 117
+2025-03-25 09:08:01.278 | INFO    | [Resultsview] Adding plot to navigator
+2025-03-25 09:08:01.280 | INFO    | [Resultsview] Plot widget dimensions after add - X: 465, Y: 235, W: 410, H: 330
+2025-03-25 09:08:01.281 | INFO    | [Resultsview] Plot creation completed
+2025-03-25 09:08:01.282 | INFO    | [Resultsview] Creating plot of type: importance
+2025-03-25 09:08:01.283 | INFO    | [Resultsview] Plot dimensions - X: 465, Y: 235, W: 410, H: 330
+2025-03-25 09:08:01.284 | INFO    | [Resultsview] Feature importance plot - Number of features: 3
+2025-03-25 09:08:02.288 | INFO    | [Resultsview] Adding plot to navigator
+2025-03-25 09:08:02.290 | INFO    | [Resultsview] Plot widget dimensions after add - X: 465, Y: 235, W: 410, H: 330
+2025-03-25 09:08:02.292 | INFO    | [Resultsview] Plot creation completed
+2025-03-25 09:08:05.021 | INFO    | [MainWindow] Updating UI for state: 3
+2025-03-25 09:08:05.024 | INFO    | [MainWindow] Showing VariableSelector
+2025-03-25 09:08:05.083 | INFO    | [MainWindow] UI updated
+2025-03-25 09:08:06.831 | INFO    | [MainWindow] Updating UI for state: 1
+2025-03-25 09:08:06.833 | INFO    | [MainWindow] Showing ModelSelector
+2025-03-25 09:08:06.846 | INFO    | [MainWindow] UI updated
+2025-03-25 09:08:10.247 | INFO    | [MainWindow] Model selected: XGBoost
+2025-03-25 09:08:10.249 | INFO    | [MainWindow] Moving to hyperparameter selection
+2025-03-25 09:08:10.251 | INFO    | [MainWindow] Setting model type on hyperparameter selector: XGBoost
+2025-03-25 09:08:10.252 | DEBUG   | [HyperparameterSelector] Setting model type to: XGBoost
+2025-03-25 09:08:10.253 | DEBUG   | [HyperparameterSelector] Clearing UI
+2025-03-25 09:08:10.254 | DEBUG   | [HyperparameterSelector] UI cleared
+2025-03-25 09:08:10.255 | DEBUG   | [HyperparameterSelector] Building UI for model type: XGBoost
+2025-03-25 09:08:10.257 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: learning_rate
+2025-03-25 09:08:10.258 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: learning_rate
+2025-03-25 09:08:10.259 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: max_depth
+2025-03-25 09:08:10.260 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: max_depth
+2025-03-25 09:08:10.261 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: n_estimators
+2025-03-25 09:08:10.262 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: n_estimators
+2025-03-25 09:08:10.263 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: subsample
+2025-03-25 09:08:10.264 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: subsample
+2025-03-25 09:08:10.265 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: colsample_bytree
+2025-03-25 09:08:10.267 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: colsample_bytree
+2025-03-25 09:08:10.268 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: min_child_weight
+2025-03-25 09:08:10.269 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: min_child_weight
+2025-03-25 09:08:10.270 | DEBUG   | [HyperparameterSelector] Adding auto toggle for parameter: gamma
+2025-03-25 09:08:10.271 | DEBUG   | [HyperparameterSelector] Auto toggle added for parameter: gamma
+2025-03-25 09:08:10.272 | DEBUG   | [HyperparameterSelector] UI built for model type: XGBoost
+2025-03-25 09:08:10.273 | DEBUG   | [HyperparameterSelector] Model type set and UI rebuilt
+2025-03-25 09:08:10.274 | INFO    | [MainWindow] Model type set successfully
+2025-03-25 09:08:10.275 | INFO    | [MainWindow] Updating UI for state: 2
+2025-03-25 09:08:10.276 | INFO    | [MainWindow] Showing HyperparameterSelector
+2025-03-25 09:08:10.312 | INFO    | [MainWindow] UI updated
+2025-03-25 09:08:12.144 | DEBUG   | [HyperparameterSelector] Next button clicked
+2025-03-25 09:08:12.147 | DEBUG   | [HyperparameterSelector] Collecting parameters
+2025-03-25 09:08:12.149 | DEBUG   | [HyperparameterSelector] Parameter learning_rate = 0.1 (slider)
+2025-03-25 09:08:12.151 | DEBUG   | [HyperparameterSelector] Parameter max_depth = 6 (slider)
+2025-03-25 09:08:12.152 | DEBUG   | [HyperparameterSelector] Parameter n_estimators = 100 (slider)
+2025-03-25 09:08:12.153 | DEBUG   | [HyperparameterSelector] Parameter subsample = 1 (slider)
+2025-03-25 09:08:12.154 | DEBUG   | [HyperparameterSelector] Parameter colsample_bytree = 1 (slider)
+2025-03-25 09:08:12.155 | DEBUG   | [HyperparameterSelector] Parameter min_child_weight = 1 (slider)
+2025-03-25 09:08:12.156 | DEBUG   | [HyperparameterSelector] Parameter gamma = 0 (slider)
+2025-03-25 09:08:12.157 | DEBUG   | [HyperparameterSelector] Parameter collection complete, collected 7 parameters
+2025-03-25 09:08:12.158 | INFO    | [MainWindow] Hyperparameters selected for model: XGBoost
+2025-03-25 09:08:12.159 | INFO    | [MainWindow]   learning_rate = 0.1
+2025-03-25 09:08:12.160 | INFO    | [MainWindow]   max_depth = 6
+2025-03-25 09:08:12.161 | INFO    | [MainWindow]   colsample_bytree = 1
+2025-03-25 09:08:12.163 | INFO    | [MainWindow]   n_estimators = 100
+2025-03-25 09:08:12.164 | INFO    | [MainWindow]   min_child_weight = 1
+2025-03-25 09:08:12.165 | INFO    | [MainWindow]   subsample = 1
+2025-03-25 09:08:12.165 | INFO    | [MainWindow]   gamma = 0
+2025-03-25 09:08:12.166 | INFO    | [MainWindow] Moving to variable selection
+2025-03-25 09:08:12.167 | INFO    | [MainWindow] Updating UI for state: 3
+2025-03-25 09:08:12.170 | INFO    | [MainWindow] Showing VariableSelector
+2025-03-25 09:08:12.228 | INFO    | [MainWindow] UI updated
+2025-03-25 09:08:14.191 | INFO    | [MainWindow] Updating UI for state: 2
+2025-03-25 09:08:14.195 | INFO    | [MainWindow] Showing HyperparameterSelector
+2025-03-25 09:08:14.234 | INFO    | [MainWindow] UI updated
+2025-03-25 09:08:15.727 | DEBUG   | [HyperparameterSelector] Next button clicked
+2025-03-25 09:08:15.730 | DEBUG   | [HyperparameterSelector] Collecting parameters
+2025-03-25 09:08:15.732 | DEBUG   | [HyperparameterSelector] Parameter learning_rate = 0.1 (slider)
+2025-03-25 09:08:15.734 | DEBUG   | [HyperparameterSelector] Parameter max_depth = 6 (slider)
+2025-03-25 09:08:15.736 | DEBUG   | [HyperparameterSelector] Parameter n_estimators = 100 (slider)
+2025-03-25 09:08:15.737 | DEBUG   | [HyperparameterSelector] Parameter subsample = 1 (slider)
+2025-03-25 09:08:15.737 | DEBUG   | [HyperparameterSelector] Parameter colsample_bytree = 1 (slider)
+2025-03-25 09:08:15.738 | DEBUG   | [HyperparameterSelector] Parameter min_child_weight = 1 (slider)
+2025-03-25 09:08:15.739 | DEBUG   | [HyperparameterSelector] Parameter gamma = 0 (slider)
+2025-03-25 09:08:15.740 | DEBUG   | [HyperparameterSelector] Parameter collection complete, collected 7 parameters
+2025-03-25 09:08:15.741 | INFO    | [MainWindow] Hyperparameters selected for model: XGBoost
+2025-03-25 09:08:15.742 | INFO    | [MainWindow]   learning_rate = 0.1
+2025-03-25 09:08:15.743 | INFO    | [MainWindow]   max_depth = 6
+2025-03-25 09:08:15.745 | INFO    | [MainWindow]   colsample_bytree = 1
+2025-03-25 09:08:15.746 | INFO    | [MainWindow]   n_estimators = 100
+2025-03-25 09:08:15.747 | INFO    | [MainWindow]   min_child_weight = 1
+2025-03-25 09:08:15.748 | INFO    | [MainWindow]   subsample = 1
+2025-03-25 09:08:15.749 | INFO    | [MainWindow]   gamma = 0
+2025-03-25 09:08:15.749 | INFO    | [MainWindow] Moving to variable selection
+2025-03-25 09:08:15.750 | INFO    | [MainWindow] Updating UI for state: 3
+2025-03-25 09:08:15.751 | INFO    | [MainWindow] Showing VariableSelector
+2025-03-25 09:08:15.810 | INFO    | [MainWindow] UI updated
+2025-03-25 09:08:22.122 | INFO    | [MainWindow] Creating model of type: XGBoost
+2025-03-25 09:08:22.125 | INFO    | [MainWindow] Model created successfully
+2025-03-25 09:08:22.127 | INFO    | [MainWindow] Data dimensions - Samples: 117, Features: 2
+2025-03-25 09:08:22.129 | INFO    | [MainWindow] Target variable statistics - Mean: 9006.948718, StdDev: 552.852786
+2025-03-25 09:08:22.131 | INFO    | [MainWindow] Feature 0 statistics - Mean: 34.482906, StdDev: 0.174086
+2025-03-25 09:08:22.132 | INFO    | [MainWindow] Feature 1 statistics - Mean: 15823.376135, StdDev: 1285.257919
+2025-03-25 09:08:22.137 | INFO    | [MainWindow] Attempting to fit XGBoost model
+2025-03-25 09:08:22.187 | ERROR   | [MainWindow] Failed to fit XGBoost model

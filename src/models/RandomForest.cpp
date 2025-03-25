@@ -100,8 +100,14 @@ bool RandomForest::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y,
         // Calculate feature importance
         calculateFeatureImportance();
         
-        // Calculate RMSE
-        Eigen::VectorXd predictions = predict(X);
+        // Calculate RMSE directly instead of using predict()
+        Eigen::VectorXd predictions = Eigen::VectorXd::Zero(nSamples);
+        for (const auto& tree : trees) {
+            for (int i = 0; i < nSamples; ++i) {
+                predictions(i) += predictTree(X.row(i), tree.root);
+            }
+        }
+        predictions /= nEstimators;
         rmse = std::sqrt((predictions - y).array().square().mean());
         
         isFitted = true;

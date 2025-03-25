@@ -106,12 +106,17 @@ bool GradientBoosting::fit(const Eigen::MatrixXd& X, const Eigen::VectorXd& y,
             trees.push_back(tree);
         }
         
-        // Calculate RMSE
-        Eigen::VectorXd predictions = predict(X);
-        rmse = std::sqrt((predictions - y).array().square().mean());
-        
         // Calculate feature importance
         calculateFeatureImportance();
+        
+        // Calculate RMSE directly instead of using predict()
+        Eigen::VectorXd predictions = Eigen::VectorXd::Constant(nSamples, initialPrediction);
+        for (const auto& tree : trees) {
+            for (int i = 0; i < nSamples; ++i) {
+                predictions(i) += learningRate * predictTree(X.row(i), tree.root);
+            }
+        }
+        rmse = std::sqrt((predictions - y).array().square().mean());
         
         isFitted = true;
         return true;
