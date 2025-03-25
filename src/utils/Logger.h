@@ -13,7 +13,7 @@ enum class LogLevel {
     DEBUG,
     INFO,
     WARNING,
-    ERROR,
+    ERR,
     FATAL
 };
 
@@ -45,7 +45,7 @@ public:
     }
 
     void error(const std::string& message, const std::string& component = "") {
-        log(LogLevel::ERROR, message, component);
+        log(LogLevel::ERR, message, component);
     }
 
     void fatal(const std::string& message, const std::string& component = "") {
@@ -90,7 +90,7 @@ public:
             case LogLevel::DEBUG:   levelStr = "DEBUG"; break;
             case LogLevel::INFO:    levelStr = "INFO"; break;
             case LogLevel::WARNING: levelStr = "WARNING"; break;
-            case LogLevel::ERROR:   levelStr = "ERROR"; break;
+            case LogLevel::ERR:   levelStr = "ERROR"; break;
             case LogLevel::FATAL:   levelStr = "FATAL"; break;
             default:                levelStr = "UNKNOWN";
         }

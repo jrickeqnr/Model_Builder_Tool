@@ -4,12 +4,18 @@ project(LinearRegressionTool VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Find Python
-find_package(Python3 COMPONENTS Development NumPy REQUIRED)
+# Set custom Python paths
+set(PYTHON_ROOT "C:/Users/JRICK/dev/cpython-3.13.2")
+set(PYTHON_INCLUDE_DIR "C:/Users/JRICK/dev/cpython-3.13.2/Include")
+set(PYTHON_LIBRARY "C:/Users/JRICK/dev/cpython-3.13.2/PCbuild/amd64/python313_d.lib")
+set(PYTHON_EXECUTABLE "C:/Users/JRICK/dev/cpython-3.13.2/PCbuild/amd64/python_d.exe")
+
+# Find NumPy with specific Python version
+find_package(Python3 3.13 COMPONENTS NumPy REQUIRED)
 
 set(FLTK_DIR "C:/Users/JRICK/Dev/fltk-1.4.2-source/fltk-1.4.2/build")
 set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../eigen-3.4.0")
-set(MATPLOTLIB_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../matplotlib-cpp")
+set(MATPLOTLIB_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/plotting")
 
 # Find packages
 find_package(FLTK REQUIRED NO_DEFAULT_PATH PATHS ${FLTK_DIR})
@@ -21,7 +27,7 @@ include_directories(
     ${MATPLOTLIB_CPP_DIR}
     ${EIGEN3_INCLUDE_DIR}
     ${FLTK_INCLUDE_DIRS}
-    ${Python3_INCLUDE_DIRS}
+    ${PYTHON_INCLUDE_DIR}
     ${Python3_NumPy_INCLUDE_DIRS}
 )
 
@@ -61,7 +67,7 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${FLTK_LIBRARIES}
     Eigen3::Eigen
-    Python3::Python
+    ${PYTHON_LIBRARY}
     Python3::NumPy
 )
 
@@ -74,19 +80,3 @@ endif()
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE shlwapi)
 endif()
-
-# Create the plotting_scripts directory if it doesn't exist
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/plotting_scripts)
-
-# Copy the Python script to the build directory
-configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/plotting_scripts/plot_regression.py
-    ${CMAKE_CURRENT_BINARY_DIR}/plotting_scripts/plot_regression.py
-    COPYONLY
-)
-
-# Install
-install(TARGETS ${PROJECT_NAME} DESTINATION bin)
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/plotting_scripts/ 
-        DESTINATION bin/plotting_scripts
-        FILES_MATCHING PATTERN "*.py")
