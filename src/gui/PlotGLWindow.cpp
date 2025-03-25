@@ -40,6 +40,7 @@ void PlotGLWindow::draw() {
             initialized = initializeImGui();
             if (!initialized) {
                 LOG_ERR("Failed to initialize ImGui/ImPlot", "PlotGLWindow");
+                return;
             }
         }
     }
@@ -48,57 +49,55 @@ void PlotGLWindow::draw() {
     glClearColor(0.9f, 0.9f, 0.9f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     
-    // Log OpenGL version for debugging
-    if (!openGLVersionLogged) {
-        const char* version = (const char*)glGetString(GL_VERSION);
-        if (version) {
-            LOG_INFO("OpenGL Version: " + std::string(version), "PlotGLWindow");
-        } else {
-            LOG_WARN("Could not get OpenGL version", "PlotGLWindow");
-        }
-        openGLVersionLogged = true;
-    }
+    // Start new ImGui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplFLTK_NewFrame();
+    ImGui::NewFrame();
     
-    // Draw a test rectangle to verify OpenGL is working
-    drawTestRectangle();
+    // Create a window that fills the entire area
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    ImGui::SetNextWindowSize(ImVec2(w(), h()));
     
-    // Render the plot if initialized
-    if (initialized) {
-        try {
-            // Use try-catch for each rendering step to provide better error reporting
-            try {
-                // Start new ImGui frame
-                ImGui_ImplOpenGL3_NewFrame();
-                ImGui_ImplFLTK_NewFrame();
-                ImGui::NewFrame();
-                
-                // Create an ImGui window for our plot
-                ImGui::Begin("##PlotWindow", nullptr, ImGuiWindowFlags_NoTitleBar | 
-                                                     ImGuiWindowFlags_NoResize | 
-                                                     ImGuiWindowFlags_NoScrollbar | 
-                                                     ImGuiWindowFlags_NoCollapse);
-                
-                // Render the current plot
-                renderPlot();
-                
-                // End the ImGui window
-                ImGui::End();
-                
-                // Render
-                ImGui::Render();
-                ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-            } catch (const std::exception& e) {
-                LOG_ERR("Exception during ImGui rendering: " + std::string(e.what()), "PlotGLWindow");
-                drawErrorMessage("ImGui rendering error: " + std::string(e.what()));
-            }
-        } catch (const std::exception& e) {
-            LOG_ERR("Exception during plot rendering: " + std::string(e.what()), "PlotGLWindow");
-            drawErrorMessage("Rendering error: " + std::string(e.what()));
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | 
+                                  ImGuiWindowFlags_NoResize | 
+                                  ImGuiWindowFlags_NoMove | 
+                                  ImGuiWindowFlags_NoScrollbar | 
+                                  ImGuiWindowFlags_NoCollapse;
+    
+    if (ImGui::Begin("##PlotWindow", nullptr, window_flags)) {
+        // Calculate plot size to fill most of the window
+        ImVec2 availSize = ImGui::GetContentRegionAvail();
+        ImVec2 plotSize(availSize.x * 0.95f, availSize.y * 0.95f);
+        
+        // Render the appropriate plot based on type
+        LOG_DEBUG("Rendering plot of type: " + std::to_string(static_cast<int>(currentPlotType)), "PlotGLWindow");
+        
+        switch (currentPlotType) {
+            case PlotType::Scatter:
+                renderScatterPlot();
+                break;
+            case PlotType::TimeSeries:
+                renderTimeSeriesPlot();
+                break;
+            case PlotType::Residual:
+                renderResidualPlot();
+                break;
+            case PlotType::Importance:
+                renderImportancePlot();
+                break;
+            case PlotType::LearningCurve:
+                renderLearningCurvePlot();
+                break;
+            default:
+                ImGui::Text("No plot type selected");
+                break;
         }
-    } else {
-        // Draw a message if not initialized
-        drawErrorMessage("ImGui/ImPlot not initialized");
     }
+    ImGui::End();
+    
+    // Render ImGui
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
     
     // We need to explicitly swap the buffers for OpenGL double-buffering
     swap_buffers();
@@ -340,36 +339,6 @@ void PlotGLWindow::createLearningCurvePlot(
     
     LOG_INFO("Learning curve plot created successfully", "PlotGLWindow");
     redraw();  // Request a redraw to show the new plot
-}
-
-void PlotGLWindow::renderPlot() {
-    LOG_DEBUG("Rendering plot of type: " + std::to_string(static_cast<int>(currentPlotType)), "PlotGLWindow");
-    
-    // Display the current plot title at the top
-    ImGui::Text("%s", plotTitle.c_str());
-    ImGui::Separator();
-    
-    // Render the appropriate plot based on the current plot type
-    switch (currentPlotType) {
-        case PlotType::Scatter:
-            renderScatterPlot();
-            break;
-        case PlotType::TimeSeries:
-            renderTimeSeriesPlot();
-            break;
-        case PlotType::Residual:
-            renderResidualPlot();
-            break;
-        case PlotType::Importance:
-            renderImportancePlot();
-            break;
-        case PlotType::LearningCurve:
-            renderLearningCurvePlot();
-            break;
-        default:
-            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Unknown plot type");
-            break;
-    }
 }
 
 void PlotGLWindow::renderScatterPlot() {

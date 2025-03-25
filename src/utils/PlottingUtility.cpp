@@ -455,45 +455,9 @@ void PlottingUtility::render() {
         
         gl_window->make_current();
         
-        // Set up OpenGL state
-        glViewport(0, 0, gl_window->w(), gl_window->h());
+        // Clear the background
         glClearColor(0.9f, 0.9f, 0.9f, 1.0f);  // Light gray background
         glClear(GL_COLOR_BUFFER_BIT);
-        
-        // Check for OpenGL errors
-        GLenum err = glGetError();
-        if (err != GL_NO_ERROR) {
-            LOG_ERR("OpenGL error: " + std::to_string(err), "PlottingUtility");
-        }
-        
-        // Check OpenGL version
-        const char* glVersion = (const char*)glGetString(GL_VERSION);
-        LOG_INFO("OpenGL Version: " + std::string(glVersion ? glVersion : "unknown"), "PlottingUtility");
-        
-        // Draw a test rectangle to verify OpenGL is working
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glOrtho(0, gl_window->w(), gl_window->h(), 0, -1, 1);
-        glMatrixMode(GL_MODELVIEW);
-        glLoadIdentity();
-        
-        glColor3f(1.0f, 0.0f, 0.0f);  // Red color
-        glBegin(GL_QUADS);
-        glVertex2f(50.0f, 50.0f);
-        glVertex2f(150.0f, 50.0f);
-        glVertex2f(150.0f, 150.0f);
-        glVertex2f(50.0f, 150.0f);
-        glEnd();
-        
-        // Check if rectangle drawing had errors
-        err = glGetError();
-        if (err != GL_NO_ERROR) {
-            LOG_ERR("OpenGL error after drawing rectangle: " + std::to_string(err), "PlottingUtility");
-        } else {
-            LOG_INFO("Test rectangle drawn successfully", "PlottingUtility");
-        }
-        
-        LOG_DEBUG("OpenGL state set up", "PlottingUtility");
         
         // Make sure ImGui frame state is clean before starting new frame
         ensureFrameIsClean();
@@ -506,55 +470,28 @@ void PlottingUtility::render() {
             
             LOG_DEBUG("ImGui frame started", "PlottingUtility");
             
-            // Don't create a redundant window - directly render the plot content
-            LOG_DEBUG("Current plot type: " + std::to_string(static_cast<int>(currentPlot.type)), "PlottingUtility");
+            // Create an ImGui window for our plot that fills the entire area
+            ImGui::SetNextWindowPos(ImVec2(0, 0));
+            ImGui::SetNextWindowSize(ImVec2(gl_window->w(), gl_window->h()));
             
-            // Make sure we have a valid window context for ImPlot
-            ImGui::Begin("##PlotWindow", nullptr, ImGuiWindowFlags_NoTitleBar | 
-                                                ImGuiWindowFlags_NoResize | 
-                                                ImGuiWindowFlags_NoScrollbar | 
-                                                ImGuiWindowFlags_NoCollapse);
+            ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | 
+                                          ImGuiWindowFlags_NoResize | 
+                                          ImGuiWindowFlags_NoMove | 
+                                          ImGuiWindowFlags_NoScrollbar | 
+                                          ImGuiWindowFlags_NoCollapse;
+            
+            ImGui::Begin("##PlotWindow", nullptr, window_flags);
             
             // Calculate plot size to fill the entire area
-            ImVec2 plotSize(gl_window->w() - 20, gl_window->h() - 100);  // Leave some padding
+            ImVec2 availSize = ImGui::GetContentRegionAvail();
+            ImVec2 plotSize(availSize.x * 0.95f, availSize.y * 0.95f);
             
             // Set plot style with light theme
             ImPlot::PushStyleColor(ImPlotCol_FrameBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
             ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
             ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
             
-            // Provide some padding
-            ImGui::SetCursorPos(ImVec2(10, 10));
-            
-            // Add navigation buttons at the top if needed
-            ImGui::BeginGroup();
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 10));
-            
-            // Plot type label - just show the title
-            const char* plotTypeNames[] = {
-                "Scatter Plot",
-                "Time Series",
-                "Residual Plot",
-                "Importance Plot",
-                "Learning Curve"
-            };
-            
-            // Display the current plot's title
-            if (!currentPlot.title.empty()) {
-                ImGui::Text("%s", currentPlot.title.c_str());
-            } else {
-                ImGui::Text("%s", plotTypeNames[static_cast<int>(currentPlot.type)]);
-            }
-            
-            ImGui::PopStyleVar();
-            ImGui::EndGroup();
-            
-            ImGui::Separator();
-            
             // Render the appropriate plot based on type
-            LOG_INFO("About to render plot of type: " + std::to_string(static_cast<int>(currentPlot.type)) + 
-                    " - Title: " + currentPlot.title, "PlottingUtility");
-            
             switch (currentPlot.type) {
                 case PlotData::Type::Scatter:
                     renderScatterPlot();
@@ -572,40 +509,26 @@ void PlottingUtility::render() {
                     renderLearningCurvePlot();
                     break;
                 default:
-                    LOG_WARN("No plot type selected", "PlottingUtility");
                     ImGui::Text("No plot data available");
                     break;
             }
             
             ImPlot::PopStyleColor(3);
-            
-            // End the ImGui window we created
             ImGui::End();
             
-            // End frame and render
+            // Render ImGui
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        }
-        catch (const std::exception& e) {
+            
+        } catch (const std::exception& e) {
             LOG_ERR("Exception during ImGui rendering: " + std::string(e.what()), "PlottingUtility");
-            
-            // Make sure to end the ImGui frame if an exception occurred
-            if (ImGui::GetCurrentContext() && ImGui::GetFrameCount() > 0) {
-                LOG_WARN("Ending ImGui frame after exception", "PlottingUtility");
-                ImGui::EndFrame();
-                ImGui::Render(); // Render an empty frame
-            }
-            
-            throw; // Rethrow the exception
         }
         
         // Swap buffers
         gl_window->swap_buffers();
         
-        LOG_DEBUG("Plot rendering completed successfully", "PlottingUtility");
-    }
-    catch (const std::exception& e) {
-        LOG_ERR("Exception during PlottingUtility rendering: " + std::string(e.what()), "PlottingUtility");
+    } catch (const std::exception& e) {
+        LOG_ERR("Exception during plot rendering: " + std::string(e.what()), "PlottingUtility");
     }
 }
 
