@@ -29,14 +29,14 @@
 class ResultsView : public Fl_Group {
 public:
     ResultsView(int x, int y, int w, int h);
-    ~ResultsView();
+    ~ResultsView() override;
     
     /**
      * @brief Set the model to display results for
      * 
      * @param model The fitted model to display
      */
-    void setModel(std::shared_ptr<Model> model);
+    void setModel(std::shared_ptr<Model> newModel);
     
     /**
      * @brief Set multiple models for comparison
@@ -63,7 +63,8 @@ public:
     void render();  // Add render method declaration
 
 private:
-    // UI components - match the names used in the CPP file
+    // Left panel (stats and params)
+    Fl_Group* leftPanel;
     Fl_Group* statisticsPanel;
     Fl_Box* statisticsTitle;
     Fl_Text_Display* statisticsDisplay;
@@ -74,25 +75,34 @@ private:
     Fl_Text_Display* parametersDisplay;
     Fl_Text_Buffer* parametersBuffer;
     
+    // Right panel (plots)
+    Fl_Group* rightPanel;
+    Fl_Group* navigationGroup;
+    Fl_Button* prevButton;
+    Fl_Button* nextButton;
+    Fl_Box* plotTypeLabel;
     Fl_Gl_Window* plotsPanel;
     Fl_Button* exportButton;
     
-    // Data
+    // Model data
     std::shared_ptr<Model> model;
     std::shared_ptr<DataFrame> dataFrame;
     std::vector<std::shared_ptr<Model>> comparisonModels;
     
     // Plot state
     bool plottingInitialized;
+    int currentPlotType;
+    
+    // Model comparison state
     size_t currentModelIndex;
     bool showModelNavigation;
     
-    // Callbacks
-    static void exportButtonCallback(Fl_Widget* w, void* data);
-    
-    // Helper methods for creating displays
+    // Methods
+    void createPlots();
     void updateStatisticsDisplay();
     void updateParametersDisplay();
-    void createPlots();
+    void cyclePlot(int direction);
+    void updatePlotTypeLabel();
     void exportResults();
+    static void exportButtonCallback(Fl_Widget* w, void* data);
 };

@@ -77,10 +77,10 @@ bool PlottingUtility::initialize(Fl_Widget* parent) {
             return false;
         }
         
-        // Set up plot style
+        // Set up plot style with light theme
         LOG_DEBUG("Setting up plot style", "PlottingUtility");
-        ImGui::StyleColorsDark();
-        ImPlot::StyleColorsDark();
+        ImGui::StyleColorsLight();
+        ImPlot::StyleColorsLight();
         
         // Customize plot style
         ImPlot::GetStyle().LineWeight = 2.0f;
@@ -176,9 +176,8 @@ bool PlottingUtility::renderPlotWindow(const std::string& title, int width, int 
                                      ImGuiWindowFlags_NoResize | 
                                      ImGuiWindowFlags_NoMove | 
                                      ImGuiWindowFlags_NoScrollbar |
-                                     ImGuiWindowFlags_NoCollapse |
-                                     ImGuiWindowFlags_NoBackground |
-                                     ImGuiWindowFlags_NoBringToFrontOnFocus;
+                                     ImGuiWindowFlags_NoCollapse;
+                                     // Removed NoBackground and NoBringToFrontOnFocus flags
         
         if (!ImGui::Begin("PlotWindow", nullptr, windowFlags)) {
             ImGui::End();
@@ -401,7 +400,12 @@ void PlottingUtility::createLearningCurvePlot(
 }
 
 void PlottingUtility::render() {
-    if (!initialized || !parentWidget) return;
+    if (!initialized || !parentWidget) {
+        LOG_ERR("Cannot render: initialized=" + std::to_string(initialized) + 
+                ", parentWidget=" + std::to_string(reinterpret_cast<uintptr_t>(parentWidget)), 
+                "PlottingUtility");
+        return;
+    }
     
     LOG_DEBUG("PlottingUtility::render() called", "PlottingUtility");
     
@@ -413,44 +417,126 @@ void PlottingUtility::render() {
             return;
         }
         
+        LOG_DEBUG("GL window dimensions: " + std::to_string(gl_window->w()) + "x" + std::to_string(gl_window->h()), 
+                  "PlottingUtility");
+        
         gl_window->make_current();
         
         // Set up OpenGL state
         glViewport(0, 0, gl_window->w(), gl_window->h());
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);  // White background
+        glClearColor(0.9f, 0.9f, 0.9f, 1.0f);  // Light gray background
         glClear(GL_COLOR_BUFFER_BIT);
+        
+        LOG_DEBUG("OpenGL state set up", "PlottingUtility");
         
         // Start new frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplFLTK_NewFrame();
         ImGui::NewFrame();
         
-        // Set up the window
+        LOG_DEBUG("ImGui frame started", "PlottingUtility");
+        
+        // Set up the window to fill the GL window
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(ImVec2(gl_window->w(), gl_window->h()));
         ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | 
                                       ImGuiWindowFlags_NoResize | 
                                       ImGuiWindowFlags_NoMove | 
                                       ImGuiWindowFlags_NoScrollbar |
-                                      ImGuiWindowFlags_NoCollapse |
-                                      ImGuiWindowFlags_NoBackground;
+                                      ImGuiWindowFlags_NoCollapse;
         
-        ImGui::Begin("Plot Window", nullptr, window_flags);
+        LOG_DEBUG("Current plot type: " + std::to_string(static_cast<int>(currentPlot.type)), "PlottingUtility");
         
-        // Calculate plot size to fill most of the window
-        ImVec2 windowSize = ImGui::GetWindowSize();
-        ImVec2 plotSize(windowSize.x - 20, windowSize.y - 40);
+        // Set up ImGui style for better visibility
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
         
-        // Set plot style
-        ImPlot::PushStyleColor(ImPlotCol_FrameBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-        ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-        
-        // Render the scatter plot
-        renderScatterPlot();
-        
-        ImPlot::PopStyleColor(2);
-        
-        ImGui::End();
+        if (ImGui::Begin("Plot Window", nullptr, window_flags)) {
+            LOG_DEBUG("ImGui window created successfully", "PlottingUtility");
+            
+            // Add navigation buttons at the top
+            ImGui::BeginGroup();
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 10));
+            
+            // Previous button
+            if (ImGui::Button("Previous", ImVec2(100, 30))) {
+                int currentType = static_cast<int>(currentPlot.type);
+                currentType = (currentType - 1 + 5) % 5;  // Cycle through 0-4
+                currentPlot.type = static_cast<PlotData::Type>(currentType);
+                LOG_DEBUG("Switching to plot type: " + std::to_string(currentType), "PlottingUtility");
+            }
+            
+            ImGui::SameLine();
+            
+            // Next button
+            if (ImGui::Button("Next", ImVec2(100, 30))) {
+                int currentType = static_cast<int>(currentPlot.type);
+                currentType = (currentType + 1) % 5;  // Cycle through 0-4
+                currentPlot.type = static_cast<PlotData::Type>(currentType);
+                LOG_DEBUG("Switching to plot type: " + std::to_string(currentType), "PlottingUtility");
+            }
+            
+            ImGui::SameLine();
+            
+            // Plot type label
+            const char* plotTypeNames[] = {
+                "Scatter Plot",
+                "Time Series",
+                "Residual Plot",
+                "Importance Plot",
+                "Learning Curve"
+            };
+            ImGui::Text("Current: %s", plotTypeNames[static_cast<int>(currentPlot.type)]);
+            
+            ImGui::PopStyleVar();
+            ImGui::EndGroup();
+            
+            ImGui::Separator();
+            
+            // Calculate plot size to fill remaining space
+            ImVec2 windowSize = ImGui::GetWindowSize();
+            ImVec2 plotSize(windowSize.x - 20, windowSize.y - 100);  // Leave space for buttons
+            
+            LOG_DEBUG("Plot window size: " + std::to_string(windowSize.x) + "x" + std::to_string(windowSize.y), 
+                      "PlottingUtility");
+            
+            // Set plot style with light theme
+            ImPlot::PushStyleColor(ImPlotCol_FrameBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+            ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+            ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
+            
+            // Render the appropriate plot based on type
+            switch (currentPlot.type) {
+                case PlotData::Type::Scatter:
+                    renderScatterPlot();
+                    break;
+                case PlotData::Type::TimeSeries:
+                    renderTimeSeriesPlot();
+                    break;
+                case PlotData::Type::Residual:
+                    renderResidualPlot();
+                    break;
+                case PlotData::Type::Importance:
+                    renderImportancePlot();
+                    break;
+                case PlotData::Type::LearningCurve:
+                    renderLearningCurvePlot();
+                    break;
+                default:
+                    LOG_WARN("No plot type selected", "PlottingUtility");
+                    ImGui::Text("No plot data available");
+                    break;
+            }
+            
+            ImPlot::PopStyleColor(3);
+            ImGui::PopStyleColor(4);  // Pop the ImGui style colors we pushed
+            ImGui::End();
+            LOG_DEBUG("ImGui window ended", "PlottingUtility");
+        } else {
+            LOG_ERR("Failed to create ImGui window", "PlottingUtility");
+        }
         
         // End frame and render
         ImGui::Render();

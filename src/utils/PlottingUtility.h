@@ -38,6 +38,37 @@ class Fl_Widget;
 class PlottingUtility {
 public:
     /**
+     * @brief Data structure for storing plot data
+     */
+    struct PlotData {
+        enum class Type {
+            None,
+            Scatter,
+            TimeSeries,
+            Residual,
+            Importance,
+            LearningCurve
+        } type = Type::None;
+        
+        std::string title;
+        std::string xLabel;
+        std::string yLabel;
+        
+        std::vector<double> xValues;
+        std::vector<double> yValues;
+        std::vector<double> y2Values;
+        
+        std::unordered_map<std::string, double> importanceValues;
+        
+        std::vector<double> trainingSizes;
+        std::vector<double> trainingScores;
+        std::vector<double> validationScores;
+        
+        int width = 0;
+        int height = 0;
+    };
+
+    /**
      * @brief Get the singleton instance
      * @return Reference to the singleton instance
      */
@@ -144,6 +175,14 @@ public:
     );
     
     /**
+     * @brief Set the current plot type
+     * @param type The type of plot to display
+     */
+    void setCurrentPlotType(PlotData::Type type) {
+        currentPlot.type = type;
+    }
+    
+    /**
      * @brief Render the current plot
      */
     void render();
@@ -160,6 +199,7 @@ private:
     // Member variables
     bool initialized;
     Fl_Widget* parentWidget;
+    PlotData currentPlot;
     
     /**
      * @brief Set up the ImPlot style
@@ -207,40 +247,6 @@ private:
      * @brief Render learning curve plot using ImPlot
      */
     void renderLearningCurvePlot();
-    
-    /**
-     * @brief Data structure for storing plot data
-     */
-    struct PlotData {
-        enum class Type {
-            None,
-            Scatter,
-            TimeSeries,
-            Residual,
-            Importance,
-            LearningCurve
-        } type = Type::None;
-        
-        std::string title;
-        std::string xLabel;
-        std::string yLabel;
-        
-        std::vector<double> xValues;
-        std::vector<double> yValues;
-        std::vector<double> y2Values;
-        
-        std::unordered_map<std::string, double> importanceValues;
-        
-        std::vector<double> trainingSizes;
-        std::vector<double> trainingScores;
-        std::vector<double> validationScores;
-        
-        int width = 0;
-        int height = 0;
-    };
-    
-    // Current plot data
-    PlotData currentPlot;
     
     /**
      * @brief Get the path to the application's executable directory
