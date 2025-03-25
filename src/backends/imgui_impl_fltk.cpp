@@ -63,7 +63,7 @@ bool ImGui_ImplFLTK_Init(Fl_Window* window, Fl_Gl_Window* gl_window)
     window->callback(ImGui_ImplFLTK_ResizeCallback);
 
     // Setup Platform/Renderer backends
-    ImGui_ImplOpenGL3_Init("#version 130");
+    ImGui_ImplOpenGL3_Init("#version 150");
 
     return true;
 }

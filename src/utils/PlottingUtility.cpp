@@ -49,60 +49,7 @@ bool PlottingUtility::initialize(Fl_Widget* parent) {
         // Make GL window current
         gl_window->make_current();
         
-        // Initialize ImGui context
-        LOG_DEBUG("Initializing ImGui context", "PlottingUtility");
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        
-        // Initialize ImPlot context
-        LOG_DEBUG("Initializing ImPlot context", "PlottingUtility");
-        ImPlot::CreateContext();
-        
-        // Configure ImGui IO
-        LOG_DEBUG("Configuring ImGui IO", "PlottingUtility");
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-        
-        // Initialize ImGui FLTK backend
-        LOG_DEBUG("Initializing ImGui FLTK backend", "PlottingUtility");
-        if (!ImGui_ImplFLTK_Init(parent->window(), gl_window)) {
-            LOG_ERR("Failed to initialize ImGui FLTK backend", "PlottingUtility");
-            return false;
-        }
-        
-        // Initialize ImGui OpenGL3 backend with older version for better compatibility
-        LOG_DEBUG("Initializing ImGui OpenGL3 backend with compatibility version", "PlottingUtility");
-        if (!ImGui_ImplOpenGL3_Init("#version 120")) {
-            LOG_ERR("Failed to initialize ImGui OpenGL3 backend", "PlottingUtility");
-            return false;
-        }
-        
-        // Set up plot style with light theme
-        LOG_DEBUG("Setting up plot style", "PlottingUtility");
-        ImGui::StyleColorsLight();
-        ImPlot::StyleColorsLight();
-        
-        // Customize plot style
-        ImPlot::GetStyle().LineWeight = 2.0f;
-        ImPlot::GetStyle().MarkerSize = 6.0f;
-        ImPlot::GetStyle().MarkerWeight = 2.0f;
-        ImPlot::GetStyle().FillAlpha = 1.0f;
-        ImPlot::GetStyle().ErrorBarWeight = 1.5f;
-        ImPlot::GetStyle().DigitalBitHeight = 8.0f;
-        
-        // Set grid style
-        ImPlot::GetStyle().MajorGridSize = ImVec2(1.0f, 1.0f);
-        ImPlot::GetStyle().MinorGridSize = ImVec2(1.0f, 1.0f);
-        
-        // Build font atlas
-        LOG_DEBUG("Building font atlas", "PlottingUtility");
-        if (!io.Fonts->IsBuilt()) {
-            unsigned char* pixels;
-            int width, height;
-            io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
-        }
-        
-        LOG_DEBUG("ImPlot style setup complete", "PlottingUtility");
+        // Store the parent widget
         initialized = true;
         parentWidget = parent;
         
@@ -123,23 +70,6 @@ void PlottingUtility::cleanup() {
     }
     
     try {
-        // End any in-progress ImGui frame
-        safeEndImGuiFrame();
-        
-        // Shutdown ImGui backends
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplFLTK_Shutdown();
-        
-        // Destroy ImPlot context
-        if (ImPlot::GetCurrentContext()) {
-            ImPlot::DestroyContext();
-        }
-        
-        // Destroy ImGui context
-        if (ImGui::GetCurrentContext()) {
-            ImGui::DestroyContext();
-        }
-        
         initialized = false;
         parentWidget = nullptr;
         

@@ -13,7 +13,7 @@
 PlotGLWindow::PlotGLWindow(int x, int y, int w, int h, const char* label)
     : Fl_Gl_Window(x, y, w, h, label), initialized(false) {
     // Set up proper OpenGL mode for modern usage
-    mode(FL_RGB | FL_DOUBLE | FL_DEPTH | FL_OPENGL3);
+    mode(FL_RGB | FL_DOUBLE | FL_DEPTH | FL_OPENGL3 | FL_STENCIL);
     
     LOG_INFO("PlotGLWindow constructor", "PlotGLWindow");
 }
@@ -123,7 +123,7 @@ bool PlotGLWindow::initializeImGui() {
         io.Fonts->Build();  // Build fonts before backend init
         
         // Initialize ImGui OpenGL3 backend first
-        if (!ImGui_ImplOpenGL3_Init("#version 120")) {
+        if (!ImGui_ImplOpenGL3_Init("#version 150")) {
             LOG_ERR("Failed to initialize ImGui OpenGL3 backend", "PlotGLWindow");
             return false;
         }

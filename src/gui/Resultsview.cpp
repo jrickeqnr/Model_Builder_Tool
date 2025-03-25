@@ -142,6 +142,9 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     currentModelIndex = 0;
     showModelNavigation = false;
     
+    // Update the plot type label
+    updatePlotTypeLabel();
+    
     LOG_INFO("ResultsView construction complete", "ResultsView");
 }
 
