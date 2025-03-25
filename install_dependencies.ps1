@@ -1,8 +1,8 @@
 # PowerShell script to install numpy and matplotlib for CPython 3.13.2
 
 # Set Python paths
-$PYTHON_ROOT = "C:/Users/JRICK/dev/Model_Builder_Tool/python/cpython-3.13.2"
-$PYTHON_EXECUTABLE = "$PYTHON_ROOT/PCbuild/amd64/python.exe"
+$PYTHON_ROOT = "C:/Users/JRICK/Appdata/Local/Programs/Python/Python313"
+$PYTHON_EXECUTABLE = "$PYTHON_ROOT/python.exe"
 
 # First, ensure pip is installed
 Write-Host "Installing pip..."
@@ -18,10 +18,10 @@ Write-Host "Installing build dependencies..."
 
 # Install numpy and matplotlib with specific versions for Python 3.13.2
 Write-Host "Installing numpy..."
-& $PYTHON_EXECUTABLE -m pip install "numpy>=1.26.0" --no-cache-dir
+& $PYTHON_EXECUTABLE -m pip install "numpy" --no-cache-dir
 
 Write-Host "Installing matplotlib..."
-& $PYTHON_EXECUTABLE -m pip install "matplotlib>=3.8.0" --no-cache-dir
+& $PYTHON_EXECUTABLE -m pip install "matplotlib" --no-cache-dir
 
 # Verify installations
 Write-Host "Verifying installations..."

@@ -4,17 +4,12 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "cmake --build build --config Debug",
-            "options": {
-                "env": {
-                    "PATH": "C:\\msys64\\mingw64\\bin;${env:PATH}"
-                }
-            },
+            "command": "cmake --build build --config Release",
             "group": {
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": "$gcc"
+            "problemMatcher": ["$gcc"]
         }
     ]
 } 
