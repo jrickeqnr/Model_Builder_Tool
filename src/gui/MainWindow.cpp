@@ -158,7 +158,7 @@ void MainWindow::handleFileSelected(const std::string& filePath) {
         currentState = State::ModelSelection;
         updateUI();
     } catch (const std::exception& e) {
-        LOG_ERROR("Failed to load CSV file: " + std::string(e.what()), "MainWindow");
+        LOG_ERR("Failed to load CSV file: " + std::string(e.what()), "MainWindow");
         fl_alert("Failed to load CSV file: %s", e.what());
         statusBar->copy_label("Failed to load CSV file");
     }
@@ -178,9 +178,9 @@ void MainWindow::handleModelSelected(const std::string& modelType) {
             hyperparameterSelector->setModelType(modelType);
             LOG_INFO("Model type set successfully", "MainWindow");
         } catch (const std::exception& e) {
-            LOG_ERROR("Exception when setting model type: " + std::string(e.what()), "MainWindow");
+            LOG_ERR("Exception when setting model type: " + std::string(e.what()), "MainWindow");
         } catch (...) {
-            LOG_ERROR("Unknown exception when setting model type", "MainWindow");
+            LOG_ERR("Unknown exception when setting model type", "MainWindow");
         }
     } else {
         // Linear Regression has no hyperparameters, skip to variable selection
@@ -404,7 +404,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
         }
         else if (modelType == "ElasticNet") {
             // TODO: Implement ElasticNet model
-            LOG_ERROR("ElasticNet model not yet implemented", "MainWindow");
+            LOG_ERR("ElasticNet model not yet implemented", "MainWindow");
             fl_alert("ElasticNet model is not yet implemented. Please select a different model type.");
             return nullptr;
         }
@@ -429,7 +429,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                     min_child_weight = std::stoi(currentHyperparameters.at("min_child_weight"));
                     gamma = std::stod(currentHyperparameters.at("gamma"));
                 } catch (const std::exception& e) {
-                    LOG_ERROR("Error parsing XGBoost hyperparameters: " + std::string(e.what()), "MainWindow");
+                    LOG_ERR("Error parsing XGBoost hyperparameters: " + std::string(e.what()), "MainWindow");
                 }
             }
 
@@ -438,7 +438,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
         }
         else if (modelType == "Random Forest") {
             // TODO: Implement Random Forest model
-            LOG_ERROR("Random Forest model not yet implemented", "MainWindow");
+            LOG_ERR("Random Forest model not yet implemented", "MainWindow");
             fl_alert("Random Forest model is not yet implemented. Please select a different model type.");
             return nullptr;
         }
@@ -471,7 +471,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                     solver = currentHyperparameters.at("solver");
                     alpha = std::stod(currentHyperparameters.at("alpha"));
                 } catch (const std::exception& e) {
-                    LOG_ERROR("Error parsing Neural Network hyperparameters: " + std::string(e.what()), "MainWindow");
+                    LOG_ERR("Error parsing Neural Network hyperparameters: " + std::string(e.what()), "MainWindow");
                 }
             }
 
@@ -500,7 +500,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                     subsample = std::stod(currentHyperparameters.at("subsample"));
                     loss = currentHyperparameters.at("loss");
                 } catch (const std::exception& e) {
-                    LOG_ERROR("Error parsing Gradient Boosting hyperparameters: " + std::string(e.what()), "MainWindow");
+                    LOG_ERR("Error parsing Gradient Boosting hyperparameters: " + std::string(e.what()), "MainWindow");
                 }
             }
 
@@ -509,7 +509,7 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
                                                       min_samples_leaf, subsample, loss);
         }
         else {
-            LOG_ERROR("Unknown model type: " + modelType, "MainWindow");
+            LOG_ERR("Unknown model type: " + modelType, "MainWindow");
             fl_alert("Unknown model type selected. Please try again.");
             return nullptr;
         }
@@ -517,12 +517,12 @@ std::shared_ptr<Model> MainWindow::createModel(const std::string& modelType) {
         if (result) {
             LOG_INFO("Model created successfully", "MainWindow");
         } else {
-            LOG_ERROR("Failed to create model", "MainWindow");
+            LOG_ERR("Failed to create model", "MainWindow");
         }
     } catch (const std::exception& e) {
-        LOG_ERROR("Exception creating model: " + std::string(e.what()), "MainWindow");
+        LOG_ERR("Exception creating model: " + std::string(e.what()), "MainWindow");
     } catch (...) {
-        LOG_ERROR("Unknown exception creating model", "MainWindow");
+        LOG_ERR("Unknown exception creating model", "MainWindow");
     }
     
     return result;
@@ -534,7 +534,7 @@ void MainWindow::menuCallback(Fl_Widget* widget, void* userData) {
         const char* action = static_cast<const char*>(userData);
         
         if (!window) {
-            LOG_ERROR("Null window pointer in menu callback", "MainWindow");
+            LOG_ERR("Null window pointer in menu callback", "MainWindow");
             return;
         }
         
@@ -549,8 +549,8 @@ void MainWindow::menuCallback(Fl_Widget* widget, void* userData) {
                       "A simple tool for performing linear regression analysis on CSV data.");
         }
     } catch (const std::exception& e) {
-        LOG_ERROR("Exception in menu callback: " + std::string(e.what()), "MainWindow");
+        LOG_ERR("Exception in menu callback: " + std::string(e.what()), "MainWindow");
     } catch (...) {
-        LOG_ERROR("Unknown exception in menu callback", "MainWindow");
+        LOG_ERR("Unknown exception in menu callback", "MainWindow");
     }
 }

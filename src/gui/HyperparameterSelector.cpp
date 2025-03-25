@@ -535,9 +535,9 @@ std::unordered_map<std::string, std::string> HyperparameterSelector::collectPara
                 LOG_DEBUG("Parameter " + param.name + " = " + params[param.name] + " (input)", "HyperparameterSelector");
             }
         } catch (const std::exception& e) {
-            LOG_ERROR("Exception while collecting parameter " + param.name + ": " + e.what(), "HyperparameterSelector");
+            LOG_ERR("Exception while collecting parameter " + param.name + ": " + e.what(), "HyperparameterSelector");
         } catch (...) {
-            LOG_ERROR("Unknown exception while collecting parameter " + param.name, "HyperparameterSelector");
+            LOG_ERR("Unknown exception while collecting parameter " + param.name, "HyperparameterSelector");
         }
     }
     
@@ -552,7 +552,7 @@ void HyperparameterSelector::nextButtonCallback(Fl_Widget* widget, void* userDat
     if (self) {
         self->handleNextButtonClick();
     } else {
-        LOG_ERROR("Next button callback has null self pointer", "HyperparameterSelector");
+        LOG_ERR("Next button callback has null self pointer", "HyperparameterSelector");
     }
 }
 
@@ -563,7 +563,7 @@ void HyperparameterSelector::backButtonCallback(Fl_Widget* widget, void* userDat
     if (self) {
         self->handleBackButtonClick();
     } else {
-        LOG_ERROR("Back button callback has null self pointer", "HyperparameterSelector");
+        LOG_ERR("Back button callback has null self pointer", "HyperparameterSelector");
     }
 }
 
@@ -576,7 +576,7 @@ std::string HyperparameterSelector::findParamNameByAutoToggle(Fl_Check_Button* a
             return param.name;
         }
     }
-    LOG_ERROR("Parameter name not found for auto toggle button", "HyperparameterSelector");
+    LOG_ERR("Parameter name not found for auto toggle button", "HyperparameterSelector");
     return "";
 }
 
@@ -590,12 +590,12 @@ void HyperparameterSelector::autoToggleCallback(Fl_Widget* widget, void* userDat
         Fl_Check_Button* checkButton = static_cast<Fl_Check_Button*>(widget);
         
         if (!self) {
-            LOG_ERROR("Auto toggle callback has null self pointer", "HyperparameterSelector");
+            LOG_ERR("Auto toggle callback has null self pointer", "HyperparameterSelector");
             return;
         }
         
         if (!checkButton) {
-            LOG_ERROR("Auto toggle callback has null check button pointer", "HyperparameterSelector");
+            LOG_ERR("Auto toggle callback has null check button pointer", "HyperparameterSelector");
             return;
         }
         
@@ -608,11 +608,11 @@ void HyperparameterSelector::autoToggleCallback(Fl_Widget* widget, void* userDat
             LOG_DEBUG("Handling auto toggle for parameter: " + paramName, "HyperparameterSelector");
             self->handleAutoToggle(paramName);
         } else {
-            LOG_ERROR("Could not find parameter name for auto toggle button", "HyperparameterSelector");
+            LOG_ERR("Could not find parameter name for auto toggle button", "HyperparameterSelector");
         }
     } catch (const std::exception& e) {
-        LOG_ERROR("Exception in autoToggleCallback: " + std::string(e.what()), "HyperparameterSelector");
+        LOG_ERR("Exception in autoToggleCallback: " + std::string(e.what()), "HyperparameterSelector");
     } catch (...) {
-        LOG_ERROR("Unknown exception in autoToggleCallback", "HyperparameterSelector");
+        LOG_ERR("Unknown exception in autoToggleCallback", "HyperparameterSelector");
     }
 } 

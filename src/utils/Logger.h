@@ -118,5 +118,5 @@ private:
 #define LOG_DEBUG(message, component) Logger::getInstance().debug(message, component)
 #define LOG_INFO(message, component) Logger::getInstance().info(message, component)
 #define LOG_WARN(message, component) Logger::getInstance().warn(message, component)
-#define LOG_ERROR(message, component) Logger::getInstance().error(message, component)
+#define LOG_ERR(message, component) Logger::getInstance().error(message, component)
 #define LOG_FATAL(message, component) Logger::getInstance().fatal(message, component) 

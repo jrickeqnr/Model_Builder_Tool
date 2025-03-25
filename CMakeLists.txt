@@ -11,7 +11,6 @@ set(EIGEN3_INCLUDE_DIR "C:/Users/JRICK/Dev/eigen-3.4.0")
 find_package(FLTK REQUIRED NO_DEFAULT_PATH PATHS ${FLTK_DIR})
 find_package(Eigen3 REQUIRED)
 find_package(Python3 COMPONENTS Development NumPy REQUIRED)
-find_package(OpenGL REQUIRED)
 
 # Include directories
 include_directories(
@@ -50,8 +49,6 @@ set(SOURCES
     src/models/NeuralNetwork.cpp
     src/data/CSVReader.cpp
     src/data/DataFrame.cpp
-    # The PlottingUtility.h is a header-only file, so it's not included here
-    # The Logger.h is a header-only file, so it's not included here
 )
 
 # Create executable
@@ -63,7 +60,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Eigen3::Eigen
     ${Python3_LIBRARIES}
     matplotlib_cpp
-    ${OPENGL_LIBRARIES}
 )
 
 # FLTK might require additional system libraries on some platforms

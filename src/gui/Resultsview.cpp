@@ -24,25 +24,6 @@
 #define LOG_INFO(message, component) std::cout << "[INFO][" << component << "] " << message << std::endl
 #endif
 
-// Add logging function with file clearing on first use
-void log_debug(const std::string& message) {
-    static bool first_call = true;
-    std::ofstream logFile;
-    
-    if (first_call) {
-        // Clear the file on first use
-        logFile.open("debug.log", std::ios::out | std::ios::trunc);
-        first_call = false;
-    } else {
-        logFile.open("debug.log", std::ios::app);
-    }
-    
-    auto now = std::chrono::system_clock::now();
-    auto now_c = std::chrono::system_clock::to_time_t(now);
-    logFile << std::ctime(&now_c) << message << std::endl;
-    logFile.close();
-}
-
 // PlotWidget implementation
 PlotWidget::PlotWidget(int x, int y, int w, int h)
     : Fl_Group(x, y, w, h), plotImageData(nullptr), plotImageWidth(0), plotImageHeight(0),
@@ -155,7 +136,7 @@ bool PlotWidget::createTempDataFile(const std::string& data, const std::string& 
     try {
         std::ofstream file(filename);
         if (!file.is_open()) {
-            log_debug("ERROR: Failed to create temporary file: " + filename);
+            LOG_ERR("ERROR: Failed to create temporary file: " + filename,"Resultsview");
             return false;
         }
         
@@ -164,7 +145,7 @@ bool PlotWidget::createTempDataFile(const std::string& data, const std::string& 
         return true;
     }
     catch (const std::exception& e) {
-        log_debug("ERROR: Exception while creating temporary file: " + std::string(e.what()));
+        LOG_ERR("ERROR: Exception while creating temporary file: " + std::string(e.what()),"Resultsview");
         return false;
     }
 }
@@ -175,7 +156,7 @@ bool PlotWidget::executePythonScript(const std::string& scriptPath, const std::s
         // Check if Python is available
         int pythonCheck = system("python --version > nul 2>&1");
         if (pythonCheck != 0) {
-            log_debug("ERROR: Python is not available");
+            LOG_ERR("ERROR: Python is not available","Resultsview");
             fl_alert("Python is not available. Please install Python and required libraries (matplotlib, pandas, numpy).");
             return false;
         }
@@ -184,7 +165,7 @@ bool PlotWidget::executePythonScript(const std::string& scriptPath, const std::s
         std::string command = "python \"" + scriptPath + "\" 2>&1";
         FILE* pipe = _popen(command.c_str(), "r");
         if (!pipe) {
-            log_debug("ERROR: Failed to execute Python script");
+            LOG_ERR("ERROR: Failed to execute Python script","Resultsview");
             return false;
         }
 
@@ -194,12 +175,12 @@ bool PlotWidget::executePythonScript(const std::string& scriptPath, const std::s
         while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
             result += buffer;
         }
-        log_debug("Python script output:\n" + result);
+        LOG_INFO("Python script output:\n" + result, "Resultsview");
 
         // Close the pipe
         int status = _pclose(pipe);
         if (status != 0) {
-            log_debug("ERROR: Python script failed with status " + std::to_string(status));
+            LOG_ERR("ERROR: Python script failed with status " + std::to_string(status),"Resultsview");
             fl_alert("Failed to generate plot. Check if Python and required libraries are installed.");
             return false;
         }
@@ -207,7 +188,7 @@ bool PlotWidget::executePythonScript(const std::string& scriptPath, const std::s
         // Check if the output file was created
         std::ifstream checkFile(tempImagePath);
         if (!checkFile.good()) {
-            log_debug("ERROR: Plot image file was not created: " + tempImagePath);
+            LOG_ERR("ERROR: Plot image file was not created: " + tempImagePath, "Resultsview");
             return false;
         }
         checkFile.close();
@@ -215,7 +196,7 @@ bool PlotWidget::executePythonScript(const std::string& scriptPath, const std::s
         return true;
     }
     catch (const std::exception& e) {
-        log_debug("ERROR: Exception while executing Python script: " + std::string(e.what()));
+        LOG_ERR("ERROR: Exception while executing Python script: " + std::string(e.what()),"Resultsview");
         return false;
     }
 }
@@ -237,7 +218,7 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
     storedYLabel = yLabel;
     storedTitle = title;
 
-    log_debug("Creating scatter plot - Data file: " + tempDataPath + ", Image file: " + tempImagePath);
+    LOG_INFO("Creating scatter plot - Data file: " + tempDataPath + ", Image file: " + tempImagePath, "Resultsview");
 
     // Write data to temporary file
     if (!createTempDataFile("actual,predicted\n", tempDataPath)) {
@@ -246,7 +227,7 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
 
     std::ofstream dataFile(tempDataPath, std::ios::app);
     if (!dataFile.is_open()) {
-        log_debug("ERROR: Failed to append to temporary data file: " + tempDataPath);
+        LOG_ERR("ERROR: Failed to append to temporary data file: " + tempDataPath, "Resultsview");
         return;
     }
 
@@ -305,7 +286,7 @@ void PlotWidget::createScatterPlot(const std::vector<double>& actualValues,
     // Load the generated image
     std::unique_ptr<Fl_PNG_Image> pngImage(new Fl_PNG_Image(tempImagePath.c_str()));
     if (!pngImage || pngImage->w() <= 0 || pngImage->h() <= 0) {
-        log_debug("ERROR: Failed to load the generated plot image: " + tempImagePath);
+        LOG_ERR("ERROR: Failed to load the generated plot image: " + tempImagePath, "Resultsview");
         return;
     }
 
@@ -365,7 +346,7 @@ void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
     // Write data to temporary file
     std::ofstream dataFile(tempDataPath);
     if (!dataFile.is_open()) {
-        fl_alert("Failed to create temporary data file");
+        LOG_ERR("ERROR: Failed to create temporary data file", "Resultsview");
         return;
     }
 
@@ -382,7 +363,7 @@ void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
     // Create plotting script
     std::ofstream scriptFile(tempScriptPath);
     if (!scriptFile.is_open()) {
-        fl_alert("Failed to create temporary script file");
+        LOG_ERR("ERROR: Failed to create temporary script file", "Resultsview");
         return;
     }
 
@@ -422,7 +403,7 @@ void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
     std::string command = "python " + tempScriptPath;
     int result = std::system(command.c_str());
     if (result != 0) {
-        fl_alert("Failed to generate plot. Check if Python and matplotlib are installed.");
+        LOG_ERR("ERROR: Failed to generate plot. Check if Python and matplotlib are installed.", "Resultsview");
         return;
     }
 
@@ -468,7 +449,7 @@ void PlotWidget::createTimeseriesPlot(const std::vector<double>& actualValues,
         // Redraw the widget
         redraw();
     } else {
-        fl_alert("Failed to load the generated plot image: %s", tempImagePath.c_str());
+        LOG_ERR("ERROR: Failed to load the generated plot image: " + tempImagePath, "Resultsview");
     }
 }
 
@@ -486,7 +467,7 @@ void PlotWidget::createImportancePlot(const std::unordered_map<std::string, doub
     // Write data to temporary file
     std::ofstream dataFile(tempDataPath);
     if (!dataFile.is_open()) {
-        fl_alert("Failed to create temporary data file");
+        LOG_ERR("ERROR: Failed to create temporary data file", "Resultsview");
         return;
     }
 
@@ -503,7 +484,7 @@ void PlotWidget::createImportancePlot(const std::unordered_map<std::string, doub
     // Create plotting script
     std::ofstream scriptFile(tempScriptPath);
     if (!scriptFile.is_open()) {
-        fl_alert("Failed to create temporary script file");
+        LOG_ERR("ERROR: Failed to create temporary script file", "Resultsview");
         return;
     }
 
@@ -542,7 +523,7 @@ void PlotWidget::createImportancePlot(const std::unordered_map<std::string, doub
     std::string command = "python " + tempScriptPath;
     int result = std::system(command.c_str());
     if (result != 0) {
-        fl_alert("Failed to generate plot. Check if Python and matplotlib are installed.");
+        LOG_ERR("ERROR: Failed to generate plot. Check if Python and matplotlib are installed.", "Resultsview");
         return;
     }
 
@@ -588,7 +569,7 @@ void PlotWidget::createImportancePlot(const std::unordered_map<std::string, doub
         // Redraw the widget
         redraw();
     } else {
-        fl_alert("Failed to load the generated plot image: %s", tempImagePath.c_str());
+        LOG_ERR("ERROR: Failed to load the generated plot image: " + tempImagePath, "Resultsview");
     }
 }
 
@@ -636,7 +617,7 @@ bool PlotWidget::savePlot(const std::string& filename) {
         return true;
     }
     catch (const std::exception& e) {
-        fl_alert("Failed to save plot: %s", e.what());
+        LOG_ERR("ERROR: Failed to save plot: " + std::string(e.what()), "Resultsview");
         return false;
     }
 }
@@ -677,17 +658,17 @@ void PlotNavigator::createPlot(const std::shared_ptr<DataFrame>& data,
                              const std::string& plotType,
                              const std::string& title)
 {
-    log_debug("Creating plot of type: " + plotType);
+    LOG_INFO("Creating plot of type: " + plotType, "Resultsview");
     
     int plotX = x() + 5;
     int plotY = y() + 5;
     int plotW = w() - 10;
     int plotH = h() - 40;  // Leave space for navigation buttons
     
-    log_debug("Plot dimensions - X: " + std::to_string(plotX) + 
+    LOG_INFO("Plot dimensions - X: " + std::to_string(plotX) + 
               ", Y: " + std::to_string(plotY) + 
               ", W: " + std::to_string(plotW) + 
-              ", H: " + std::to_string(plotH));
+              ", H: " + std::to_string(plotH), "Resultsview");
     
     PlotWidget* plot = new PlotWidget(plotX, plotY, plotW, plotH);
     plots.push_back(plot);
@@ -699,8 +680,8 @@ void PlotNavigator::createPlot(const std::shared_ptr<DataFrame>& data,
         Eigen::VectorXd predicted = model->predict(X);
         std::vector<double> predictedVec(predicted.data(), predicted.data() + predicted.size());
         
-        log_debug("Scatter plot data size - Actual: " + std::to_string(actual.size()) + 
-                 ", Predicted: " + std::to_string(predictedVec.size()));
+        LOG_INFO("Scatter plot data size - Actual: " + std::to_string(actual.size()) + 
+                 ", Predicted: " + std::to_string(predictedVec.size()), "Resultsview");
         
         plot->createScatterPlot(actual, predictedVec, "Actual Values", "Predicted Values", title,
                                "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
@@ -711,8 +692,8 @@ void PlotNavigator::createPlot(const std::shared_ptr<DataFrame>& data,
         Eigen::VectorXd predicted = model->predict(X);
         std::vector<double> predictedVec(predicted.data(), predicted.data() + predicted.size());
         
-        log_debug("Time series plot data size - Actual: " + std::to_string(actual.size()) + 
-                 ", Predicted: " + std::to_string(predictedVec.size()));
+        LOG_INFO("Time series plot data size - Actual: " + std::to_string(actual.size()) + 
+                 ", Predicted: " + std::to_string(predictedVec.size()), "Resultsview");
         
         plot->createTimeseriesPlot(actual, predictedVec, title,
                                    "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
@@ -720,22 +701,22 @@ void PlotNavigator::createPlot(const std::shared_ptr<DataFrame>& data,
     else if (plotType == "importance") {
         auto importance = model->getFeatureImportance();
         
-        log_debug("Feature importance plot - Number of features: " + std::to_string(importance.size()));
+        LOG_INFO("Feature importance plot - Number of features: " + std::to_string(importance.size()), "Resultsview");
         
         plot->createImportancePlot(importance, title, "temp_plot_data.csv", "temp_plot_image.png", "temp_plot_script.py");
     }
     
-    log_debug("Adding plot to navigator");
+    LOG_INFO("Adding plot to navigator", "Resultsview");
     add(plot);
     
-    log_debug("Plot widget dimensions after add - X: " + std::to_string(plot->x()) + 
+    LOG_INFO("Plot widget dimensions after add - X: " + std::to_string(plot->x()) + 
               ", Y: " + std::to_string(plot->y()) + 
               ", W: " + std::to_string(plot->w()) + 
-              ", H: " + std::to_string(plot->h()));
+              ", H: " + std::to_string(plot->h()), "Resultsview");
     
     updateVisibility();
     updateNavigationButtons();
-    log_debug("Plot creation completed");
+    LOG_INFO("Plot creation completed", "Resultsview");
 }
 
 void PlotNavigator::nextPlot()
@@ -827,7 +808,7 @@ bool PlotNavigator::savePlotToFile(size_t index, const std::string& filename) {
         return true;
     }
     catch (const std::exception& e) {
-        fl_alert("Failed to save plot: %s", e.what());
+        LOG_ERR("ERROR: Failed to save plot: " + std::string(e.what()), "Resultsview");
         return false;
     }
 }
