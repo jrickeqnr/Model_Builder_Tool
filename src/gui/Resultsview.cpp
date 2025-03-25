@@ -988,141 +988,165 @@ bool PlotNavigator::savePlotToFile(size_t index, const std::string& filename) {
 
 // ResultsView implementation
 ResultsView::ResultsView(int x, int y, int w, int h)
-    : Fl_Group(x, y, w, h),
-      exportDialog(nullptr)  // Initialize to nullptr first
+    : Fl_Group(x, y, w, h)
 {
-    // Debug breakpoint 1: Start of constructor
-    #ifdef _DEBUG
-    __debugbreak();
-    #endif
-
-    begin();
-    
-    // Set group properties
-    box(FL_FLAT_BOX);
-    color(FL_BACKGROUND_COLOR);
-    
-    // Constants for layout
-    int margin = 20;
-    int headerHeight = 40;
-    int bottomButtonsHeight = 40;
-    int equationHeight = 60;
-    int subtitleHeight = 25;  // Height for the model type subtitle
-    
-    // Debug breakpoint 2: After basic setup
-    #ifdef _DEBUG
-    __debugbreak();
-    #endif
-
-    // Create title label
-    modelTitleLabel = new Fl_Box(x + margin, y + margin, w - 2*margin, headerHeight, "Model Results");
-    modelTitleLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    modelTitleLabel->labelsize(18);
-    modelTitleLabel->labelfont(FL_BOLD);
-    
-    // Create subtitle label
-    modelSubtitleLabel = new Fl_Box(x + margin, y + margin + headerHeight, w - 2*margin, subtitleHeight, "");
-    modelSubtitleLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    modelSubtitleLabel->labelsize(14);
-    modelSubtitleLabel->labelfont(FL_ITALIC);
-    
-    // Debug breakpoint 3: After labels
-    #ifdef _DEBUG
-    __debugbreak();
-    #endif
-
-    // Create equation display box (moved down by subtitleHeight)
-    equationBox = new Fl_Box(x + margin, y + margin + headerHeight + subtitleHeight + 5, 
-                            w - 2*margin, equationHeight, "Regression Equation:");
-    equationBox->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
-    equationBox->labelsize(14);
-    equationBox->labelfont(FL_BOLD);
-    
-    equationDisplay = new Fl_Box(x + margin + 20, y + margin + headerHeight + subtitleHeight + 30, 
-                                w - 2*margin - 40, equationHeight - 20, "");
-    equationDisplay->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
-    equationDisplay->labelsize(14);
-    equationDisplay->box(FL_BORDER_BOX);
-    
-    // Debug breakpoint 4: After equation display
-    #ifdef _DEBUG
-    __debugbreak();
-    #endif
-
-    // Create main display area (moved down by subtitleHeight)
-    int contentY = y + margin + headerHeight + subtitleHeight + equationHeight + 15;
-    int contentHeight = h - margin*2 - headerHeight - subtitleHeight - equationHeight - 15 - bottomButtonsHeight - 10;
-    int tableWidth = (w - margin*3) / 2;
-    
-    // Parameters group (left side)
-    parametersGroup = new Fl_Group(x + margin, contentY, tableWidth, contentHeight/2);
-    parametersGroup->box(FL_BORDER_BOX);
-    parametersGroup->begin();
-    
-    Fl_Box* parametersLabel = new Fl_Box(x + margin + 10, contentY + 10, tableWidth - 20, 30, "Model Parameters");
-    parametersLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    parametersLabel->labelsize(14);
-    parametersLabel->labelfont(FL_BOLD);
-    
-    parametersTable = new DataTable(x + margin + 10, contentY + 50, 
-                                  tableWidth - 20, contentHeight/2 - 60);
-    
-    parametersGroup->end();
-    
-    // Debug breakpoint 5: After parameters group
-    #ifdef _DEBUG
-    __debugbreak();
-    #endif
-
-    // Statistics group (left side, bottom half)
-    statisticsGroup = new Fl_Group(x + margin, contentY + contentHeight/2 + 10, tableWidth, contentHeight/2 - 10);
-    statisticsGroup->box(FL_BORDER_BOX);
-    statisticsGroup->begin();
-    
-    Fl_Box* statisticsLabel = new Fl_Box(x + margin + 10, contentY + contentHeight/2 + 20, tableWidth - 20, 30, "Model Statistics");
-    statisticsLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    statisticsLabel->labelsize(14);
-    statisticsLabel->labelfont(FL_BOLD);
-    
-    statisticsTable = new DataTable(x + margin + 10, contentY + contentHeight/2 + 60, 
-                                  tableWidth - 20, contentHeight/2 - 70);
-    
-    statisticsGroup->end();
-    
-    // Debug breakpoint 6: After statistics group
-    #ifdef _DEBUG
-    __debugbreak();
-    #endif
-
-    // Plot navigator (right side)
-    plotNavigator = new PlotNavigator(x + margin*2 + tableWidth, contentY, tableWidth, contentHeight);
-    
-    // Create bottom buttons
-    int buttonY = y + h - margin - bottomButtonsHeight;
-    
-    backButton = new Fl_Button(x + margin, buttonY, 100, bottomButtonsHeight, "Back");
-    backButton->callback(backButtonCallback_static, this);
-    
-    exportButton = new Fl_Button(x + w - margin - 150, buttonY, 150, bottomButtonsHeight, "Export Results");
-    exportButton->callback(exportButtonCallback_static, this);
-    
-    end();
-
-    // Debug breakpoint 7: Before export dialog creation
-    #ifdef _DEBUG
-    __debugbreak();
-    #endif
-
-    // Create the export dialog after all other widgets are initialized
-    exportDialog = std::make_unique<ExportDialog>(400, 300, "Export Options");
-    exportDialog->onExport = [this](const ExportDialog::ExportOptions& options) {
-        exportResults(options);
-    };
-
-    // Debug breakpoint 8: After export dialog creation
-    #ifdef _DEBUG
-    __debugbreak();
-    #endif
+    try {
+        begin();
+        
+        // Set group properties
+        box(FL_FLAT_BOX);
+        color(FL_BACKGROUND_COLOR);
+        
+        // Validate dimensions
+        if (w <= 0 || h <= 0) {
+            throw std::runtime_error("Invalid dimensions for ResultsView");
+        }
+        
+        // Constants for layout
+        int margin = 20;
+        int headerHeight = 40;
+        int bottomButtonsHeight = 40;
+        int equationHeight = 60;
+        int subtitleHeight = 25;  // Height for the model type subtitle
+        
+        // Create title label
+        modelTitleLabel = new Fl_Box(x + margin, y + margin, w - 2*margin, headerHeight, "Model Results");
+        if (!modelTitleLabel) {
+            throw std::runtime_error("Failed to create model title label");
+        }
+        modelTitleLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+        modelTitleLabel->labelsize(18);
+        modelTitleLabel->labelfont(FL_BOLD);
+        
+        // Create subtitle label
+        modelSubtitleLabel = new Fl_Box(x + margin, y + margin + headerHeight, w - 2*margin, subtitleHeight, "");
+        if (!modelSubtitleLabel) {
+            throw std::runtime_error("Failed to create model subtitle label");
+        }
+        modelSubtitleLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+        modelSubtitleLabel->labelsize(14);
+        modelSubtitleLabel->labelfont(FL_ITALIC);
+        
+        // Create equation display box
+        equationBox = new Fl_Box(x + margin, y + margin + headerHeight + subtitleHeight + 5, 
+                                w - 2*margin, equationHeight, "Regression Equation:");
+        if (!equationBox) {
+            throw std::runtime_error("Failed to create equation box");
+        }
+        equationBox->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+        equationBox->labelsize(14);
+        equationBox->labelfont(FL_BOLD);
+        
+        equationDisplay = new Fl_Box(x + margin + 20, y + margin + headerHeight + subtitleHeight + 30, 
+                                    w - 2*margin - 40, equationHeight - 20, "");
+        if (!equationDisplay) {
+            throw std::runtime_error("Failed to create equation display");
+        }
+        equationDisplay->align(FL_ALIGN_LEFT | FL_ALIGN_TOP | FL_ALIGN_INSIDE);
+        equationDisplay->labelsize(14);
+        equationDisplay->box(FL_BORDER_BOX);
+        
+        // Create main display area
+        int contentY = y + margin + headerHeight + subtitleHeight + equationHeight + 15;
+        int contentHeight = h - margin*2 - headerHeight - subtitleHeight - equationHeight - 15 - bottomButtonsHeight - 10;
+        int tableWidth = (w - margin*3) / 2;
+        
+        // Validate content dimensions
+        if (contentHeight <= 0 || tableWidth <= 0) {
+            throw std::runtime_error("Invalid content dimensions");
+        }
+        
+        // Parameters group (left side)
+        parametersGroup = new Fl_Group(x + margin, contentY, tableWidth, contentHeight/2);
+        if (!parametersGroup) {
+            throw std::runtime_error("Failed to create parameters group");
+        }
+        parametersGroup->box(FL_BORDER_BOX);
+        parametersGroup->begin();
+        
+        Fl_Box* parametersLabel = new Fl_Box(x + margin + 10, contentY + 10, tableWidth - 20, 30, "Model Parameters");
+        if (!parametersLabel) {
+            throw std::runtime_error("Failed to create parameters label");
+        }
+        parametersLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+        parametersLabel->labelsize(14);
+        parametersLabel->labelfont(FL_BOLD);
+        
+        parametersTable = new DataTable(x + margin + 10, contentY + 50, 
+                                      tableWidth - 20, contentHeight/2 - 60);
+        if (!parametersTable) {
+            throw std::runtime_error("Failed to create parameters table");
+        }
+        
+        parametersGroup->end();
+        
+        // Statistics group (left side, bottom half)
+        statisticsGroup = new Fl_Group(x + margin, contentY + contentHeight/2 + 10, tableWidth, contentHeight/2 - 10);
+        if (!statisticsGroup) {
+            throw std::runtime_error("Failed to create statistics group");
+        }
+        statisticsGroup->box(FL_BORDER_BOX);
+        statisticsGroup->begin();
+        
+        Fl_Box* statisticsLabel = new Fl_Box(x + margin + 10, contentY + contentHeight/2 + 20, tableWidth - 20, 30, "Model Statistics");
+        if (!statisticsLabel) {
+            throw std::runtime_error("Failed to create statistics label");
+        }
+        statisticsLabel->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
+        statisticsLabel->labelsize(14);
+        statisticsLabel->labelfont(FL_BOLD);
+        
+        statisticsTable = new DataTable(x + margin + 10, contentY + contentHeight/2 + 60, 
+                                      tableWidth - 20, contentHeight/2 - 70);
+        if (!statisticsTable) {
+            throw std::runtime_error("Failed to create statistics table");
+        }
+        
+        statisticsGroup->end();
+        
+        // Plot navigator (right side)
+        plotNavigator = new PlotNavigator(x + margin*2 + tableWidth, contentY, tableWidth, contentHeight);
+        if (!plotNavigator) {
+            throw std::runtime_error("Failed to create plot navigator");
+        }
+        
+        // Create bottom buttons
+        int buttonY = y + h - margin - bottomButtonsHeight;
+        
+        backButton = new Fl_Button(x + margin, buttonY, 100, bottomButtonsHeight, "Back");
+        if (!backButton) {
+            throw std::runtime_error("Failed to create back button");
+        }
+        backButton->callback(backButtonCallback_static, this);
+        
+        end();
+        
+        // Initialize member variables
+        model = nullptr;
+        dataFrame = nullptr;
+        modelType = "";
+        hyperparameters.clear();
+        backButtonCallback = nullptr;
+        
+    } catch (const std::exception& e) {
+        // Log the error
+        LOG_ERR("ERROR: Failed to create ResultsView: " + std::string(e.what()), "Resultsview");
+        
+        // Clean up any partially created widgets
+        if (modelTitleLabel) delete modelTitleLabel;
+        if (modelSubtitleLabel) delete modelSubtitleLabel;
+        if (equationBox) delete equationBox;
+        if (equationDisplay) delete equationDisplay;
+        if (parametersGroup) delete parametersGroup;
+        if (statisticsGroup) delete statisticsGroup;
+        if (plotNavigator) delete plotNavigator;
+        if (backButton) delete backButton;
+        if (parametersTable) delete parametersTable;
+        if (statisticsTable) delete statisticsTable;
+        
+        // Re-throw the exception
+        throw;
+    }
 }
 
 ResultsView::~ResultsView() {
@@ -1166,7 +1190,6 @@ void ResultsView::updateResults() {
     } else {
         // For now, all models use the same display until they are implemented
         // This will be updated as each model is implemented
-        // Replaced LOG_INFO with comment to fix build error
         updateLinearRegressionDisplay();
     }
     
@@ -1404,96 +1427,6 @@ void ResultsView::createPlots() {
     }
 }
 
-void ResultsView::exportResults(const ExportDialog::ExportOptions& options) {
-    if (!model || !dataFrame) {
-        return;
-    }
-    
-    // For now, use the original export options until the new fields are properly implemented
-    std::string exportPath = options.exportPath;
-    bool exportSummary = options.modelSummary;
-    bool exportCSV = options.predictedValues;
-    bool exportPlots = options.scatterPlot || options.linePlot || options.importancePlot;
-    
-    // Original export code
-    try {
-        // Export model summary if selected
-        if (exportSummary) {
-            std::string summaryPath = exportPath + "/model_summary.txt";
-            std::ofstream file(summaryPath);
-            if (file.is_open()) {
-                file << "Model Summary\n";
-                file << "============\n\n";
-                file << "Model Type: " << model->getName() << "\n\n";
-                
-                file << "Parameters:\n";
-                for (const auto& param : model->getParameters()) {
-                    file << "  " << param.first << ": " << param.second << "\n";
-                }
-                file << "\n";
-                
-                file << "Statistics:\n";
-                for (const auto& stat : model->getStatistics()) {
-                    file << "  " << stat.first << ": " << stat.second << "\n";
-                }
-                file << "\n";
-                
-                file << "Input Variables:\n";
-                for (const auto& var : inputVariables) {
-                    file << "  " << var << "\n";
-                }
-                file << "\n";
-                
-                file << "Target Variable: " << targetVariable << "\n";
-                file.close();
-                
-                fl_message("Model summary exported to %s", summaryPath.c_str());
-            } else {
-                fl_alert("Error: Failed to open file for writing: %s", summaryPath.c_str());
-            }
-        }
-        
-        if (exportCSV) {
-            // Generate CSV with predictions
-            std::string csvPath = exportPath + "/predictions.csv";
-            std::ofstream file(csvPath);
-            if (file.is_open()) {
-                // Write header
-                file << targetVariable << ",Predicted\n";
-                
-                // Generate predictions
-                Eigen::MatrixXd X = dataFrame->toMatrix(inputVariables);
-                Eigen::VectorXd predictions = model->predict(X);
-                std::vector<double> targetData = dataFrame->getColumn(targetVariable);
-                
-                // Write data
-                for (int i = 0; i < predictions.size(); ++i) {
-                    file << targetData[i] << "," << predictions(i) << "\n";
-                }
-                
-                file.close();
-                fl_message("Predictions exported to %s", csvPath.c_str());
-            } else {
-                fl_alert("Error: Failed to open file for writing: %s", csvPath.c_str());
-            }
-        }
-        
-        if (exportPlots) {
-            // Export all plots
-            for (size_t i = 0; i < plotNavigator->getPlotCount(); ++i) {
-                std::string plotPath = exportPath + "/plot_" + std::to_string(i+1) + ".png";
-                if (!plotNavigator->savePlotToFile(i, plotPath)) {
-                    fl_alert("Error: Failed to save plot to %s", plotPath.c_str());
-                }
-            }
-            fl_message("Plots exported to %s", exportPath.c_str());
-        }
-    }
-    catch (const std::exception& e) {
-        fl_alert("Error exporting results: %s", e.what());
-    }
-}
-
 // Model-specific display methods
 void ResultsView::updateLinearRegressionDisplay() {
     // Update parameters and statistics displays
@@ -1610,37 +1543,6 @@ void ResultsView::updateNeuralNetworkDisplay() {
     }
 }
 
-// Export methods for different model types
-void ResultsView::exportLinearRegressionResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
-void ResultsView::exportElasticNetResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
-void ResultsView::exportRandomForestResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
-void ResultsView::exportXGBoostResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
-void ResultsView::exportGradientBoostingResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
-void ResultsView::exportNeuralNetworkResults(const ExportDialog::ExportOptions& options) {
-    // Base implementation just calls the general export
-    exportResults(options);
-}
-
 void ResultsView::setBackButtonCallback(std::function<void()> callback) {
     backButtonCallback = callback;
 }
@@ -1650,23 +1552,8 @@ void ResultsView::backButtonCallback_static(Fl_Widget* widget, void* userData) {
     self->handleBackButton();
 }
 
-void ResultsView::exportButtonCallback_static(Fl_Widget* widget, void* userData) {
-    ResultsView* self = static_cast<ResultsView*>(userData);
-    self->handleExportButton();
-}
-
 void ResultsView::handleBackButton() {
     if (backButtonCallback) {
         backButtonCallback();
     }
-}
-
-void ResultsView::handleExportButton() {
-    if (!model || !dataFrame) {
-        fl_alert("No model or data available to export!");
-        return;
-    }
-
-    exportDialog->setModel(model);
-    exportDialog->show();
 }

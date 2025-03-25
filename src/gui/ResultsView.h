@@ -17,7 +17,6 @@ namespace plt = matplotlibcpp;
 
 #include "data/DataFrame.h"
 #include "models/Model.h"
-#include "gui/ExportDialog.h"
 #include "gui/DataTable.h"
 
 // Forward declarations
@@ -154,15 +153,12 @@ public:
 private:
     // Static callbacks for FLTK
     static void backButtonCallback_static(Fl_Widget* widget, void* userData);
-    static void exportButtonCallback_static(Fl_Widget* widget, void* userData);
     
     // Member functions
     void handleBackButton();
-    void handleExportButton();
     void updateParametersDisplay();
     void updateStatisticsDisplay();
     void createPlots();
-    void exportResults(const ExportDialog::ExportOptions& options);
     
     // Model-specific display methods
     void updateLinearRegressionDisplay();
@@ -171,14 +167,6 @@ private:
     void updateXGBoostDisplay();
     void updateGradientBoostingDisplay();
     void updateNeuralNetworkDisplay();
-    
-    // Export methods for different model types
-    void exportLinearRegressionResults(const ExportDialog::ExportOptions& options);
-    void exportElasticNetResults(const ExportDialog::ExportOptions& options);
-    void exportRandomForestResults(const ExportDialog::ExportOptions& options);
-    void exportXGBoostResults(const ExportDialog::ExportOptions& options);
-    void exportGradientBoostingResults(const ExportDialog::ExportOptions& options);
-    void exportNeuralNetworkResults(const ExportDialog::ExportOptions& options);
 
     // Data members
     std::shared_ptr<Model> model;
@@ -197,10 +185,8 @@ private:
     Fl_Group* statisticsGroup;
     PlotNavigator* plotNavigator;
     Fl_Button* backButton;
-    Fl_Button* exportButton;
     DataTable* parametersTable;
     DataTable* statisticsTable;
-    std::unique_ptr<ExportDialog> exportDialog;
     Fl_Box* equationBox;
 };
 
