@@ -4,31 +4,34 @@ project(LinearRegressionTool VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Find Python
+find_package(Python3 COMPONENTS Development NumPy REQUIRED)
+
 set(FLTK_DIR "C:/Users/JRICK/Dev/fltk-1.4.2-source/fltk-1.4.2/build")
 set(EIGEN3_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../eigen-3.4.0")
+set(MATPLOTLIB_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../matplotlib-cpp")
 
 # Find packages
 find_package(FLTK REQUIRED NO_DEFAULT_PATH PATHS ${FLTK_DIR})
 find_package(Eigen3 REQUIRED)
-find_package(Python3 COMPONENTS Development NumPy REQUIRED)
 
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${MATPLOTLIB_CPP_DIR}
     ${EIGEN3_INCLUDE_DIR}
+    ${FLTK_INCLUDE_DIRS}
     ${Python3_INCLUDE_DIRS}
     ${Python3_NumPy_INCLUDE_DIRS}
-    ${FLTK_INCLUDE_DIRS}
 )
 
 # Add compile definitions
 add_compile_definitions(
     CMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+    _USE_MATH_DEFINES
+    NOMINMAX
+    Py_ENABLE_SHARED=1
 )
-
-# Add matplotlib-cpp as a header-only library
-add_library(matplotlib_cpp INTERFACE)
-target_include_directories(matplotlib_cpp INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Source files
 set(SOURCES
@@ -58,8 +61,8 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${FLTK_LIBRARIES}
     Eigen3::Eigen
-    ${Python3_LIBRARIES}
-    matplotlib_cpp
+    Python3::Python
+    Python3::NumPy
 )
 
 # FLTK might require additional system libraries on some platforms

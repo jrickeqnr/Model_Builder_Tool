@@ -11,6 +11,9 @@
 #include <sstream>
 #include <iomanip>
 #include <unordered_map>
+#include <matplotlibcpp.h>
+
+namespace plt = matplotlibcpp;
 
 #include "data/DataFrame.h"
 #include "models/Model.h"
@@ -208,153 +211,6 @@ private:
  */
 class PlotWidget : public Fl_Group {
 public:
-    PlotWidget(int x, int y, int w, int h);
-    ~PlotWidget();
-
-    /**
-     * @brief Create a scatter plot
-     * 
-     * @param actualValues Actual values
-     * @param predictedValues Predicted values
-     * @param xLabel Label for x-axis
-     * @param yLabel Label for y-axis
-     * @param title Title of the plot
-     * @param tempDataPath Path for temporary data file
-     * @param tempImagePath Path for temporary image file
-     * @param tempScriptPath Path for temporary script file
-     */
-    void createScatterPlot(const std::vector<double>& actualValues,
-                          const std::vector<double>& predictedValues,
-                          const std::string& xLabel,
-                          const std::string& yLabel,
-                          const std::string& title,
-                          const std::string& tempDataPath = "temp_plot_data.csv",
-                          const std::string& tempImagePath = "temp_plot_image.png",
-                          const std::string& tempScriptPath = "temp_plot_script.py");
-
-    /**
-     * @brief Create a time series plot
-     * 
-     * @param actualValues Actual values
-     * @param predictedValues Predicted values
-     * @param title Title of the plot
-     * @param tempDataPath Path for temporary data file
-     * @param tempImagePath Path for temporary image file
-     * @param tempScriptPath Path for temporary script file
-     */
-    void createTimeseriesPlot(const std::vector<double>& actualValues,
-                             const std::vector<double>& predictedValues,
-                             const std::string& title,
-                             const std::string& tempDataPath = "temp_plot_data.csv",
-                             const std::string& tempImagePath = "temp_plot_image.png",
-                             const std::string& tempScriptPath = "temp_plot_script.py");
-
-    /**
-     * @brief Create a feature importance plot
-     * 
-     * @param importance Map of feature names to importance scores
-     * @param title Title of the plot
-     * @param tempDataPath Path for temporary data file
-     * @param tempImagePath Path for temporary image file
-     * @param tempScriptPath Path for temporary script file
-     */
-    void createImportancePlot(const std::unordered_map<std::string, double>& importance,
-                             const std::string& title,
-                             const std::string& tempDataPath = "temp_plot_data.csv",
-                             const std::string& tempImagePath = "temp_plot_image.png",
-                             const std::string& tempScriptPath = "temp_plot_script.py");
-    
-    /**
-     * @brief Create a residual plot
-     * 
-     * @param actualValues Actual values
-     * @param predictedValues Predicted values
-     * @param title Title of the plot
-     * @param tempDataPath Path for temporary data file
-     * @param tempImagePath Path for temporary image file
-     * @param tempScriptPath Path for temporary script file
-     */
-    void createResidualPlot(const std::vector<double>& actualValues,
-                           const std::vector<double>& predictedValues,
-                           const std::string& title,
-                           const std::string& tempDataPath = "temp_plot_data.csv",
-                           const std::string& tempImagePath = "temp_plot_image.png",
-                           const std::string& tempScriptPath = "temp_plot_script.py");
-    
-    /**
-     * @brief Create a learning curve plot 
-     * 
-     * @param trainingScores Vector of training scores at different sizes
-     * @param validationScores Vector of validation scores at different sizes
-     * @param trainingSizes Vector of training set sizes
-     * @param title Title of the plot
-     * @param tempDataPath Path for temporary data file
-     * @param tempImagePath Path for temporary image file
-     * @param tempScriptPath Path for temporary script file
-     */
-    void createLearningCurvePlot(const std::vector<double>& trainingScores,
-                                const std::vector<double>& validationScores,
-                                const std::vector<int>& trainingSizes,
-                                const std::string& title,
-                                const std::string& tempDataPath = "temp_plot_data.csv",
-                                const std::string& tempImagePath = "temp_plot_image.png",
-                                const std::string& tempScriptPath = "temp_plot_script.py");
-    
-    /**
-     * @brief Create a neural network architecture visualization
-     * 
-     * @param layerSizes Vector of layer sizes (including input and output layers)
-     * @param title Title of the plot
-     * @param tempDataPath Path for temporary data file
-     * @param tempImagePath Path for temporary image file
-     * @param tempScriptPath Path for temporary script file
-     */
-    void createNeuralNetworkArchitecturePlot(const std::vector<int>& layerSizes,
-                                            const std::string& title,
-                                            const std::string& tempDataPath = "temp_plot_data.csv",
-                                            const std::string& tempImagePath = "temp_plot_image.png",
-                                            const std::string& tempScriptPath = "temp_plot_script.py");
-    
-    /**
-     * @brief Create a tree visualization for tree-based models
-     * 
-     * @param treeStructure String representation of tree structure
-     * @param title Title of the plot
-     * @param tempDataPath Path for temporary data file
-     * @param tempImagePath Path for temporary image file
-     * @param tempScriptPath Path for temporary script file
-     */
-    void createTreeVisualizationPlot(const std::string& treeStructure,
-                                    const std::string& title,
-                                    const std::string& tempDataPath = "temp_plot_data.csv",
-                                    const std::string& tempImagePath = "temp_plot_image.png",
-                                    const std::string& tempScriptPath = "temp_plot_script.py");
-
-    /**
-     * @brief Save the current plot to a file
-     * 
-     * @param filename Path where to save the plot
-     * @return bool True if successful, false otherwise
-     */
-    bool savePlot(const std::string& filename);
-
-protected:
-    /**
-     * @brief Draw the widget
-     */
-    void draw() override;
-
-    /**
-     * @brief Handle resize events
-     */
-    void resize(int x, int y, int w, int h) override;
-
-private:
-    static void resizeTimeoutCallback(void* v);
-    void regeneratePlot();
-    bool createTempDataFile(const std::string& data, const std::string& filename);
-    bool executePythonScript(const std::string& scriptPath, const std::string& tempDataPath, const std::string& tempImagePath);
-
     enum class PlotType {
         None,
         Scatter,
@@ -366,39 +222,69 @@ private:
         TreeVisualization
     };
 
-    // Storage for plot image
-    char* plotImageData = nullptr;
-    int plotImageWidth = 0;
-    int plotImageHeight = 0;
-    
-    // Box for displaying the plot
-    Fl_Box* plotBox = nullptr;
-    
-    // Resize handling
-    bool resizeTimerActive = false;
-    int pendingWidth = 0;
-    int pendingHeight = 0;
-    static constexpr double RESIZE_DELAY = 0.2; // seconds
+    PlotWidget(int x, int y, int w, int h);
+    ~PlotWidget();
 
-    // Current plot type
-    PlotType currentPlotType = PlotType::None;
+    void draw() override;
+    void resize(int x, int y, int w, int h) override;
 
-    // Stored data for regeneration
+    // Direct plotting methods using matplotlibcpp
+    void createScatterPlot(const std::vector<double>& actualValues,
+                          const std::vector<double>& predictedValues,
+                          const std::string& xLabel,
+                          const std::string& yLabel,
+                          const std::string& title);
+
+    void createTimeseriesPlot(const std::vector<double>& actualValues,
+                             const std::vector<double>& predictedValues,
+                             const std::string& title);
+
+    void createImportancePlot(const std::unordered_map<std::string, double>& importance,
+                             const std::string& title);
+
+    void createResidualPlot(const std::vector<double>& actualValues,
+                           const std::vector<double>& predictedValues,
+                           const std::string& title);
+
+    void createLearningCurvePlot(const std::vector<double>& trainingScores,
+                                const std::vector<double>& validationScores,
+                                const std::vector<int>& trainingSizes,
+                                const std::string& title);
+
+    void createNeuralNetworkArchitecturePlot(const std::vector<int>& layerSizes,
+                                            const std::string& title);
+
+    void createTreeVisualizationPlot(const std::string& treeStructure,
+                                    const std::string& title);
+
+    bool savePlot(const std::string& filename);
+
+private:
+    static constexpr double RESIZE_DELAY = 0.25; // Seconds
+    static void resizeTimeoutCallback(void* v);
+    void regeneratePlot();
+
+    Fl_Box* plotBox;
+    char* plotImageData;
+    int plotImageWidth;
+    int plotImageHeight;
+    PlotType currentPlotType;
+
+    // Store data for regeneration
     std::vector<double> storedActualValues;
     std::vector<double> storedPredictedValues;
     std::string storedXLabel;
     std::string storedYLabel;
     std::string storedTitle;
     std::unordered_map<std::string, double> storedImportance;
-    
-    // For learning curves
     std::vector<double> storedTrainingScores;
     std::vector<double> storedValidationScores;
     std::vector<int> storedTrainingSizes;
-    
-    // For neural network architecture
     std::vector<int> storedLayerSizes;
-    
-    // For tree visualization
     std::string storedTreeStructure;
+
+    // Resize handling
+    bool resizeTimerActive;
+    int pendingWidth;
+    int pendingHeight;
 };
