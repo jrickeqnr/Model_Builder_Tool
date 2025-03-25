@@ -139,8 +139,6 @@ ResultsView::ResultsView(int x, int y, int w, int h)
     dataFrame = nullptr;
     plottingInitialized = false;
     currentPlotType = 0;
-    currentModelIndex = 0;
-    showModelNavigation = false;
     
     // Update the plot type label
     updatePlotTypeLabel();
@@ -368,26 +366,6 @@ void ResultsView::setModel(std::shared_ptr<Model> newModel) {
     layout();
     
     LOG_INFO("Model set successfully in ResultsView", "ResultsView");
-}
-
-void ResultsView::onModelComparisonSelected(const std::vector<std::shared_ptr<Model>>& models) {
-    if (models.empty()) {
-        LOG_WARN("No models provided for comparison", "ResultsView");
-        return;
-    }
-    
-    LOG_INFO("Model comparison selected with " + 
-             std::to_string(models.size()) + " models", "ResultsView");
-    
-    // Store the models for comparison
-    comparisonModels = models;
-    
-    // Set the current model to the first one
-    currentModelIndex = 0;
-    showModelNavigation = (models.size() > 1);
-    
-    // Set the active model
-    setModel(models[0]);
 }
 
 void ResultsView::updateStatisticsDisplay() {

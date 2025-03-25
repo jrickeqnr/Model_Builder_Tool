@@ -41,13 +41,6 @@ public:
     void setModel(std::shared_ptr<Model> newModel);
     
     /**
-     * @brief Set multiple models for comparison
-     * 
-     * @param models Vector of models to compare
-     */
-    void onModelComparisonSelected(const std::vector<std::shared_ptr<Model>>& models);
-    
-    /**
      * @brief FLTK layout method
      */
     void layout();
@@ -89,16 +82,11 @@ private:
     // Model data
     std::shared_ptr<Model> model;
     std::shared_ptr<DataFrame> dataFrame;
-    std::vector<std::shared_ptr<Model>> comparisonModels;
     
     // Plot state
     bool plottingInitialized;
     int currentPlotType;
     std::map<std::string, std::vector<double>> currentData;  // Added currentData member
-    
-    // Model comparison state
-    size_t currentModelIndex;
-    bool showModelNavigation;
     
     // Methods
     void createPlots();
