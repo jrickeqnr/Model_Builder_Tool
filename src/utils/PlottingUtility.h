@@ -2,20 +2,28 @@
 
 // Windows headers
 #include <windows.h>
+#include <Shlobj.h>
 
 // OpenGL headers
+#ifdef _WIN32
 #include <GL/gl.h>
+#include <GL/glu.h>
+#else
+#include <OpenGL/gl.h>
+#include <OpenGL/glu.h>
+#endif
 
 // FLTK headers
 #include <FL/Fl_Widget.H>
 #include <FL/Fl_Window.H>
 #include <FL/Fl_Gl_Window.H>
+#include <FL/gl.h>
 
 // ImGui headers
 #include "imgui.h"
 #include "implot.h"
+#include "imgui_impl_opengl3.h"
 #include "../backends/imgui_impl_fltk.h"
-#include "../backends/imgui_impl_opengl3.h"
 
 // Standard library headers
 #include <string>
@@ -23,6 +31,7 @@
 #include <unordered_map>
 #include <memory>
 #include <utility>
+#include <filesystem>
 
 // Project headers
 #include "utils/Logger.h"
@@ -33,7 +42,7 @@ namespace fs = std::filesystem;
 class Fl_Widget;
 
 /**
- * @brief C++ plotting utility using ImGui for direct rendering
+ * @brief C++ plotting utility using ImGui for direct rendering with FLTK
  */
 class PlottingUtility {
 public:
@@ -218,12 +227,32 @@ public:
 
 private:
     // Private constructor for singleton
-    PlottingUtility() : initialized(false), parentWidget(nullptr) {}
+    PlottingUtility() : initialized(false), parentWidget(nullptr), lastGLError(GL_NO_ERROR) {}
     
     // Member variables
     bool initialized;
     Fl_Widget* parentWidget;
     PlotData currentPlot;
+    GLenum lastGLError;  // Store the last OpenGL error
+    
+    /**
+     * @brief Check for OpenGL errors and log them
+     * @return True if an error was detected, false otherwise
+     */
+    bool checkGLError();
+
+    /**
+     * @brief Get a string description of an OpenGL error code
+     * @param error The OpenGL error code
+     * @return std::string The error description
+     */
+    std::string getGLErrorString(GLenum error);
+
+    /**
+     * @brief Initialize OpenGL context and settings
+     * @return True if initialization was successful, false otherwise
+     */
+    bool initializeOpenGL();
     
     /**
      * @brief Render a plot window with the given title and dimensions

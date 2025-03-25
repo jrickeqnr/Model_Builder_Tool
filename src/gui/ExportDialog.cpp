@@ -1,158 +1,115 @@
 #include "gui/ExportDialog.h"
-#include <FL/Fl_File_Chooser.H>
+#include <FL/Fl.H>
 #include <FL/fl_ask.H>
-#include <sstream>
-#include <iomanip>
+#include <FL/Fl_Native_File_Chooser.H>
+#include "utils/Logger.h"
 
-ExportDialog::ExportDialog()
-    : Fl_Window(400, 300, "Export Options")
+ExportDialog::ExportDialog(PlotGLWindow::PlotType plotType)
+    : Fl_Window(400, 250, "Export Plot"),
+      confirmed(false),
+      filename("plot.png"),
+      width(800),
+      height(600),
+      plotType(plotType)
 {
     initialize();
 }
 
-ExportDialog::ExportDialog(int w, int h, const char* title)
-    : Fl_Window(w, h, title)
+ExportDialog::~ExportDialog()
 {
-    initialize();
+    LOG_INFO("ExportDialog destructor called", "ExportDialog");
 }
 
-void ExportDialog::initialize() {
+void ExportDialog::initialize()
+{
+    LOG_INFO("Initializing ExportDialog", "ExportDialog");
+    
     begin();
-
-    int padding = 10;
-    int checkboxWidth = w() - 2 * padding;
-    int checkboxHeight = 25;
-    int y = padding;
-
-    // Create checkboxes for export options
-    scatterPlotCheck = new Fl_Check_Button(padding, y, checkboxWidth, checkboxHeight, "Scatter Plot");
-    scatterPlotCheck->value(1); // Default to checked
-    y += checkboxHeight + padding;
-
-    linePlotCheck = new Fl_Check_Button(padding, y, checkboxWidth, checkboxHeight, "Line Plot");
-    linePlotCheck->value(1);
-    y += checkboxHeight + padding;
-
-    importancePlotCheck = new Fl_Check_Button(padding, y, checkboxWidth, checkboxHeight, "Variable Importance Plot");
-    importancePlotCheck->value(1);
-    y += checkboxHeight + padding;
-
-    predictedValuesCheck = new Fl_Check_Button(padding, y, checkboxWidth, checkboxHeight, "Predicted Values (CSV)");
-    predictedValuesCheck->value(1);
-    y += checkboxHeight + padding;
-
-    modelSummaryCheck = new Fl_Check_Button(padding, y, checkboxWidth, checkboxHeight, "Model Summary (TXT)");
-    modelSummaryCheck->value(1);
-    y += checkboxHeight + padding;
-
-    // Create path selection components
-    pathDisplay = new Fl_Box(padding, y, w() - 3 * padding - 80, checkboxHeight, "No directory selected");
-    pathDisplay->align(FL_ALIGN_LEFT | FL_ALIGN_INSIDE);
-    pathDisplay->box(FL_DOWN_BOX);
-
-    browseButton = new Fl_Button(w() - padding - 80, y, 80, checkboxHeight, "Browse");
+    
+    // Create filename input
+    filenameInput = new Fl_Input(100, 20, 200, 25, "Filename:");
+    filenameInput->value(filename.c_str());
+    
+    // Create browse button
+    browseButton = new Fl_Button(310, 20, 70, 25, "Browse");
     browseButton->callback(browseCallback, this);
-    y += checkboxHeight + padding;
-
-    // Create action buttons
-    int buttonWidth = 80;
-    int buttonSpacing = (w() - 2 * padding - 2 * buttonWidth) / 3;
     
-    exportButton = new Fl_Button(padding + buttonSpacing, y, buttonWidth, checkboxHeight, "Export");
-    exportButton->callback(exportCallback, this);
+    // Create width input
+    widthInput = new Fl_Int_Input(100, 60, 100, 25, "Width:");
+    widthInput->value(std::to_string(width).c_str());
     
-    cancelButton = new Fl_Button(padding + buttonSpacing * 2 + buttonWidth, y, buttonWidth, checkboxHeight, "Cancel");
+    // Create height input
+    heightInput = new Fl_Int_Input(100, 100, 100, 25, "Height:");
+    heightInput->value(std::to_string(height).c_str());
+    
+    // Create OK button
+    okButton = new Fl_Button(220, 200, 70, 30, "OK");
+    okButton->callback(okCallback, this);
+    
+    // Create Cancel button
+    cancelButton = new Fl_Button(300, 200, 70, 30, "Cancel");
     cancelButton->callback(cancelCallback, this);
     
     end();
     
-    // Set window properties
     set_modal();
-    set_non_modal();
-    hide();
 }
 
-ExportDialog::~ExportDialog() {
-    // FLTK will handle widget cleanup
-}
-
-void ExportDialog::setModel(std::shared_ptr<Model> model) {
-    currentModel = model;
-}
-
-ExportDialog::ExportOptions ExportDialog::getExportOptions() const {
-    ExportOptions options;
-    // Set new fields for compatibility with updated ResultsView
-    options.exportSummary = modelSummaryCheck->value();
-    options.exportCSV = predictedValuesCheck->value();
-    options.exportPlots = scatterPlotCheck->value() || linePlotCheck->value() || importancePlotCheck->value();
-    options.outputDir = selectedPath;
-    
-    // Set legacy fields for backward compatibility
-    options.scatterPlot = scatterPlotCheck->value();
-    options.linePlot = linePlotCheck->value();
-    options.importancePlot = importancePlotCheck->value();
-    options.predictedValues = predictedValuesCheck->value();
-    options.modelSummary = modelSummaryCheck->value();
-    options.exportPath = selectedPath;
-    
-    return options;
-}
-
-void ExportDialog::browseCallback(Fl_Widget*, void* v) {
+void ExportDialog::okCallback(Fl_Widget* w, void* v)
+{
     ExportDialog* dialog = static_cast<ExportDialog*>(v);
-    
-    const char* dir = fl_dir_chooser("Select Export Directory", "", 0);
-    if (dir) {
-        dialog->selectedPath = dir;
-        dialog->pathDisplay->copy_label(dir);
-        dialog->exportButton->activate();
-    }
-}
-
-void ExportDialog::exportCallback(Fl_Widget*, void* v) {
-    ExportDialog* dialog = static_cast<ExportDialog*>(v);
-    
-    if (dialog->selectedPath.empty()) {
-        fl_alert("Please select a directory first!");
-        return;
-    }
-
-    dialog->createDirectory();
-    
-    if (dialog->onExport) {
-        dialog->onExport(dialog->getExportOptions());
-    }
-    
-    dialog->hide();
-}
-
-void ExportDialog::cancelCallback(Fl_Widget*, void* v) {
-    ExportDialog* dialog = static_cast<ExportDialog*>(v);
-    dialog->hide();
-}
-
-std::string ExportDialog::generateExportPath() const {
-    auto now = std::chrono::system_clock::now();
-    auto now_time = std::chrono::system_clock::to_time_t(now);
-    
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&now_time), "%Y%m%d_%H%M%S");
-    
-    std::string modelName = currentModel ? currentModel->getName() : "unknown_model";
-    return modelName + "_" + ss.str();
-}
-
-void ExportDialog::createDirectory() {
-    if (!selectedPath.empty()) {
-        std::filesystem::path basePath(selectedPath);
-        std::filesystem::path exportDir = basePath / generateExportPath();
+    if (dialog) {
+        LOG_INFO("OK button clicked in ExportDialog", "ExportDialog");
         
+        // Get values from inputs
+        dialog->filename = dialog->filenameInput->value();
         try {
-            std::filesystem::create_directories(exportDir);
-            selectedPath = exportDir.string();
-        } catch (const std::filesystem::filesystem_error& e) {
-            fl_alert("Failed to create export directory: %s", e.what());
+            dialog->width = std::stoi(dialog->widthInput->value());
+            dialog->height = std::stoi(dialog->heightInput->value());
+        } catch (const std::exception& e) {
+            LOG_ERR("Invalid dimensions: " + std::string(e.what()), "ExportDialog");
+            fl_alert("Please enter valid dimensions");
+            return;
+        }
+        
+        // Validate dimensions
+        if (dialog->width <= 0 || dialog->height <= 0) {
+            LOG_ERR("Invalid dimensions: width and height must be positive", "ExportDialog");
+            fl_alert("Width and height must be positive numbers");
+            return;
+        }
+        
+        dialog->confirmed = true;
+        dialog->hide();
+    }
+}
+
+void ExportDialog::cancelCallback(Fl_Widget* w, void* v)
+{
+    ExportDialog* dialog = static_cast<ExportDialog*>(v);
+    if (dialog) {
+        LOG_INFO("Cancel button clicked in ExportDialog", "ExportDialog");
+        dialog->confirmed = false;
+        dialog->hide();
+    }
+}
+
+void ExportDialog::browseCallback(Fl_Widget* w, void* v)
+{
+    ExportDialog* dialog = static_cast<ExportDialog*>(v);
+    if (dialog) {
+        LOG_INFO("Browse button clicked in ExportDialog", "ExportDialog");
+        
+        Fl_Native_File_Chooser chooser;
+        chooser.title("Save Plot As");
+        chooser.type(Fl_Native_File_Chooser::BROWSE_SAVE_FILE);
+        chooser.filter("PNG Files\t*.png\n");
+        chooser.preset_file(dialog->filename.c_str());
+        
+        if (chooser.show() == 0) {
+            dialog->filename = chooser.filename();
+            dialog->filenameInput->value(dialog->filename.c_str());
+            LOG_INFO("Selected file: " + dialog->filename, "ExportDialog");
         }
     }
 } 

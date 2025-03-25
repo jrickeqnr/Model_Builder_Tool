@@ -11,6 +11,8 @@
 #include <memory>
 
 // Third-party library headers
+#include <FL/Fl_Window.H>
+#include <FL/Fl_Box.H>
 #include <FL/Fl_Gl_Window.H>
 #include "imgui.h"
 #include "implot.h"
@@ -23,11 +25,11 @@ namespace ImGui { class ImGuiContext; }
 namespace ImPlot { class ImPlotContext; }
 
 /**
- * @brief Custom OpenGL window for plots with integrated ImGui/ImPlot
+ * @brief Custom FLTK window for plots with integrated ImGui/ImPlot
  * 
- * This class handles the OpenGL context creation and initialization
+ * This class handles the FLTK window creation and initialization
  * for plotting functionality. It directly manages ImGui/ImPlot rendering
- * without needing an external utility class.
+ * using the FLTK backend.
  */
 class PlotGLWindow : public Fl_Gl_Window {
 public:
@@ -59,7 +61,7 @@ public:
     ~PlotGLWindow();
     
     /**
-     * @brief Draw the window content - overridden from Fl_Gl_Window
+     * @brief Draw the window content - overridden from Fl_Box
      */
     void draw() override;
     
@@ -78,6 +80,7 @@ public:
     void setPlotType(PlotType type) { 
         currentPlotType = type;
         LOG_INFO("Plot type set to: " + std::to_string(static_cast<int>(currentPlotType)), "PlotGLWindow");
+        redraw();
     }
     
     /**
@@ -175,58 +178,30 @@ private:
     void renderPlot();
     
     /**
-     * @brief Render a scatter plot
-     */
-    void renderScatterPlot();
-    
-    /**
-     * @brief Render a time series plot
-     */
-    void renderTimeSeriesPlot();
-    
-    /**
-     * @brief Render a residual plot
-     */
-    void renderResidualPlot();
-    
-    /**
-     * @brief Render a feature importance plot
-     */
-    void renderImportancePlot();
-    
-    /**
-     * @brief Render a learning curve plot
-     */
-    void renderLearningCurvePlot();
-    
-    /**
-     * @brief Draw an error message on the window
-     * 
-     * @param message The error message to display
+     * @brief Draw an error message
      */
     void drawErrorMessage(const std::string& message);
     
-    /**
-     * @brief Draw a test rectangle to verify OpenGL is working
-     */
-    void drawTestRectangle();
+    // Plot rendering functions
+    void renderScatterPlot();
+    void renderTimeSeriesPlot();
+    void renderResidualPlot();
+    void renderImportancePlot();
+    void renderLearningCurvePlot();
     
-    // State variables
-    bool initialized = false;
-    bool openGLVersionLogged = false;
+    // Member variables
+    bool initialized;
+    PlotType currentPlotType;
     
     // Plot data
-    PlotType currentPlotType = PlotType::Scatter;
     std::string plotTitle;
     std::string xLabel;
     std::string yLabel;
-    
-    // Data for various plot types
     std::vector<double> xValues;
     std::vector<double> yValues;
-    std::vector<double> y2Values;  // Used for time series (predicted values)
+    std::vector<double> y2Values;
+    std::unordered_map<std::string, double> importanceValues;
     std::vector<double> trainingSizes;
     std::vector<double> trainingScores;
     std::vector<double> validationScores;
-    std::unordered_map<std::string, double> importanceValues;
 }; 

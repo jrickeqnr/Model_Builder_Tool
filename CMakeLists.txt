@@ -12,24 +12,24 @@ set(IMPLOT_DIR "C:/Users/JRICK/dev/implot")
 # Find packages
 find_package(FLTK REQUIRED NO_DEFAULT_PATH PATHS ${FLTK_DIR})
 find_package(Eigen3 REQUIRED)
-find_package(Python3 COMPONENTS Development NumPy REQUIRED)
+find_package(OpenGL REQUIRED)
 
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${EIGEN3_INCLUDE_DIR}/Eigen
-    ${Python3_INCLUDE_DIRS}
-    ${Python3_NumPy_INCLUDE_DIRS}
     ${FLTK_INCLUDE_DIRS}
     ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
     ${IMPLOT_DIR}
+    ${OPENGL_INCLUDE_DIR}
 )
 
 # Add compile definitions
 add_compile_definitions(
     CMAKE_CURRENT_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
     NOMINMAX
-    GLEW_STATIC
+    IMGUI_IMPL_OPENGL_LOADER_GLAD
 )
 
 # Add ImGui source files
@@ -39,7 +39,7 @@ set(IMGUI_SOURCES
     ${IMGUI_DIR}/imgui_draw.cpp
     ${IMGUI_DIR}/imgui_tables.cpp
     ${IMGUI_DIR}/imgui_widgets.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/imgui_impl_opengl3.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/backends/imgui_impl_fltk.cpp
 )
 
@@ -90,7 +90,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${FLTK_LIBRARIES}
     Eigen3::Eigen
-    ${Python3_LIBRARIES}
     ${OPENGL_LIBRARIES}
 )
 
@@ -101,7 +100,7 @@ endif()
 
 # Windows-specific filesystem library (needed for std::filesystem)
 if(WIN32)
-    target_link_libraries(${PROJECT_NAME} PRIVATE shlwapi)
+    target_link_libraries(${PROJECT_NAME} PRIVATE shlwapi opengl32)
 endif()
 
 # Install

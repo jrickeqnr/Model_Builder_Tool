@@ -20,6 +20,7 @@
 #include "data/DataFrame.h"
 #include "utils/PlottingUtility.h"
 #include "gui/PlotGLWindow.h"  // Include the custom window header
+#include "gui/ExportDialog.h"  // Include the export dialog header
 
 /**
  * @brief View for displaying model results
@@ -93,6 +94,7 @@ private:
     // Plot state
     bool plottingInitialized;
     int currentPlotType;
+    std::map<std::string, std::vector<double>> currentData;  // Added currentData member
     
     // Model comparison state
     size_t currentModelIndex;
@@ -105,5 +107,7 @@ private:
     void cyclePlot(int direction);
     void updatePlotTypeLabel();
     void exportResults();
+    void updatePlots();  // Added updatePlots declaration
+    void exportPlot();   // Added exportPlot declaration
     static void exportButtonCallback(Fl_Widget* w, void* data);
 };

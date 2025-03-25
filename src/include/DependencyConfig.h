@@ -1,10 +1,34 @@
 // DependencyConfig.h
 #pragma once
 
-// Version requirements
-#define REQUIRED_OPENGL_VERSION 120
-#define REQUIRED_IMGUI_VERSION "1.89.9"  // Update with actual version
-#define REQUIRED_IMPLOT_VERSION "0.16"   // Update with actual version
+// Version definitions
+#define REQUIRED_IMGUI_VERSION "1.89.9"
+#define REQUIRED_IMPLOT_VERSION "0.16"
+#define REQUIRED_FLTK_VERSION "1.4.0"
+
+// Platform-specific includes
+#ifdef _WIN32
+    #define WIN32_LEAN_AND_MEAN
+    #include <windows.h>
+#endif
+
+// FLTK configuration
+#include <FL/Fl.H>
+#include <FL/Fl_Window.H>
+
+// ImGui configuration
+#include "imgui.h"
+#include "implot.h"
+
+// Eigen configuration
+#include <Eigen/Dense>
+
+// Standard library configuration
+#include <string>
+#include <vector>
+#include <memory>
+#include <stdexcept>
+#include <filesystem>
 
 // ImGui/ImPlot configuration
 #ifdef _WIN32

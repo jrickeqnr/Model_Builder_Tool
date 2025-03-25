@@ -7,6 +7,10 @@
 #include <numeric>
 #include <limits>
 #include "utils/Logger.h"
+#include <FL/fl_draw.H>
+#include <FL/gl.h>
+#include <sstream>
+#include <iomanip>
 
 // FLTK headers
 #include <FL/Fl_Widget.H>
@@ -35,23 +39,21 @@ bool PlottingUtility::initialize(Fl_Widget* parent) {
     LOG_INFO("Initializing PlottingUtility with widget: " + std::to_string(reinterpret_cast<uintptr_t>(parent)), "PlottingUtility");
     
     try {
-        // Check for GL window - either the parent itself or its window
-        LOG_DEBUG("Checking for GL window", "PlottingUtility");
-        Fl_Gl_Window* gl_window = dynamic_cast<Fl_Gl_Window*>(parent);
-        if (!gl_window) {
-            gl_window = dynamic_cast<Fl_Gl_Window*>(parent->window());
-        }
-        if (!gl_window) {
-            LOG_ERR("No GL window found", "PlottingUtility");
+        if (!parent) {
+            LOG_ERR("Parent widget is null", "PlottingUtility");
             return false;
         }
         
-        // Make GL window current
-        gl_window->make_current();
-        
         // Store the parent widget
-        initialized = true;
         parentWidget = parent;
+        
+        // Initialize OpenGL context and settings
+        if (!initializeOpenGL()) {
+            LOG_ERR("Failed to initialize OpenGL", "PlottingUtility");
+            return false;
+        }
+        
+        initialized = true;
         
         LOG_INFO("PlottingUtility initialization complete", "PlottingUtility");
         return true;
@@ -70,8 +72,28 @@ void PlottingUtility::cleanup() {
     }
     
     try {
+        // Cleanup ImGui OpenGL3 backend
+        ImGui_ImplOpenGL3_Shutdown();
+
+        // Disable OpenGL features in reverse order of initialization
+        glDisable(GL_BLEND);
+        if (checkGLError()) {
+            LOG_WARN("Error disabling GL_BLEND during cleanup", "PlottingUtility");
+        }
+        
+        glDisable(GL_DEPTH_TEST);
+        if (checkGLError()) {
+            LOG_WARN("Error disabling GL_DEPTH_TEST during cleanup", "PlottingUtility");
+        }
+        
+        // Clear any remaining errors
+        while (glGetError() != GL_NO_ERROR) {
+            // Just clear the error queue
+        }
+        
         initialized = false;
         parentWidget = nullptr;
+        lastGLError = GL_NO_ERROR;
         
         LOG_INFO("PlottingUtility cleanup completed successfully", "PlottingUtility");
     }
@@ -364,62 +386,46 @@ void PlottingUtility::createLearningCurvePlot(
 
 void PlottingUtility::render() {
     if (!initialized || !parentWidget) {
-        LOG_ERR("Cannot render: initialized=" + std::to_string(initialized) + 
-                ", parentWidget=" + std::to_string(reinterpret_cast<uintptr_t>(parentWidget)), 
-                "PlottingUtility");
+        LOG_ERR("Cannot render: PlottingUtility not initialized or parent widget is null", "PlottingUtility");
         return;
     }
     
-    LOG_DEBUG("PlottingUtility::render() called", "PlottingUtility");
-    
     try {
-        // Get GL window and make it current
-        Fl_Gl_Window* gl_window = dynamic_cast<Fl_Gl_Window*>(parentWidget);
-        if (!gl_window) {
-            LOG_ERR("Parent widget is not a GL window", "PlottingUtility");
+        // Clear OpenGL buffers
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        if (checkGLError()) {
+            LOG_ERR("Failed to clear OpenGL buffers", "PlottingUtility");
             return;
         }
+
+        // Start new ImGui frame
+        ImGui_ImplFLTK_NewFrame();
+        ImGui::NewFrame();
         
-        LOG_DEBUG("GL window dimensions: " + std::to_string(gl_window->w()) + "x" + std::to_string(gl_window->h()), 
-                  "PlottingUtility");
+        // Create a window that fills the entire area
+        ImGui::SetNextWindowPos(ImVec2(parentWidget->x(), parentWidget->y()));
+        ImGui::SetNextWindowSize(ImVec2(parentWidget->w(), parentWidget->h()));
         
-        gl_window->make_current();
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | 
+                                      ImGuiWindowFlags_NoResize | 
+                                      ImGuiWindowFlags_NoMove | 
+                                      ImGuiWindowFlags_NoScrollbar | 
+                                      ImGuiWindowFlags_NoCollapse;
         
-        // Clear the background
-        glClearColor(0.9f, 0.9f, 0.9f, 1.0f);  // Light gray background
-        glClear(GL_COLOR_BUFFER_BIT);
-        
-        // Make sure ImGui frame state is clean before starting new frame
-        ensureFrameIsClean();
-        
-        // Start new frame and render with proper exception handling
-        try {
-            ImGui_ImplOpenGL3_NewFrame();
-            ImGui_ImplFLTK_NewFrame();
-            ImGui::NewFrame();
-            
-            LOG_DEBUG("ImGui frame started", "PlottingUtility");
-            
-            // Create an ImGui window for our plot that fills the entire area
-            ImGui::SetNextWindowPos(ImVec2(0, 0));
-            ImGui::SetNextWindowSize(ImVec2(gl_window->w(), gl_window->h()));
-            
-            ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | 
-                                          ImGuiWindowFlags_NoResize | 
-                                          ImGuiWindowFlags_NoMove | 
-                                          ImGuiWindowFlags_NoScrollbar | 
-                                          ImGuiWindowFlags_NoCollapse;
-            
-            ImGui::Begin("##PlotWindow", nullptr, window_flags);
-            
-            // Calculate plot size to fill the entire area
+        if (ImGui::Begin("##PlotWindow", nullptr, window_flags)) {
+            // Calculate plot size to fill most of the window
             ImVec2 availSize = ImGui::GetContentRegionAvail();
             ImVec2 plotSize(availSize.x * 0.95f, availSize.y * 0.95f);
             
-            // Set plot style with light theme
-            ImPlot::PushStyleColor(ImPlotCol_FrameBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-            ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-            ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
+            // Update viewport if parent size changed
+            if (parentWidget) {
+                glViewport(0, 0, parentWidget->w(), parentWidget->h());
+                if (checkGLError()) {
+                    LOG_ERR("Failed to update viewport", "PlottingUtility");
+                    ImGui::End();
+                    return;
+                }
+            }
             
             // Render the appropriate plot based on type
             switch (currentPlot.type) {
@@ -439,26 +445,28 @@ void PlottingUtility::render() {
                     renderLearningCurvePlot();
                     break;
                 default:
-                    ImGui::Text("No plot data available");
+                    ImGui::Text("No plot type selected");
                     break;
             }
-            
-            ImPlot::PopStyleColor(3);
-            ImGui::End();
-            
-            // Render ImGui
-            ImGui::Render();
-            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-            
-        } catch (const std::exception& e) {
-            LOG_ERR("Exception during ImGui rendering: " + std::string(e.what()), "PlottingUtility");
+        }
+        ImGui::End();
+        
+        // Render ImGui
+        ImGui::Render();
+        ImGui_ImplFLTK_RenderDrawData(ImGui::GetDrawData());
+        
+        // Check for OpenGL errors after rendering
+        if (checkGLError()) {
+            LOG_ERR("OpenGL error occurred during rendering", "PlottingUtility");
+            return;
         }
         
-        // Swap buffers
-        gl_window->swap_buffers();
+        // Force a redraw of the parent widget
+        parentWidget->redraw();
         
+        LOG_DEBUG("Plot rendered successfully", "PlottingUtility");
     } catch (const std::exception& e) {
-        LOG_ERR("Exception during plot rendering: " + std::string(e.what()), "PlottingUtility");
+        LOG_ERR("Error in render(): " + std::string(e.what()), "PlottingUtility");
     }
 }
 
@@ -544,9 +552,35 @@ void PlottingUtility::renderScatterPlot() {
             }
             
             // Get OpenGL error if any
-            GLenum err = glGetError();
-            if (err != GL_NO_ERROR) {
-                LOG_ERR("OpenGL error during plot creation: " + std::to_string(err), "PlottingUtility");
+            const char* error = nullptr;
+            switch (glGetError()) {
+                case GL_NO_ERROR:
+                    break;
+                case GL_INVALID_ENUM:
+                    error = "GL_INVALID_ENUM";
+                    break;
+                case GL_INVALID_VALUE:
+                    error = "GL_INVALID_VALUE";
+                    break;
+                case GL_INVALID_OPERATION:
+                    error = "GL_INVALID_OPERATION";
+                    break;
+                case GL_STACK_OVERFLOW:
+                    error = "GL_STACK_OVERFLOW";
+                    break;
+                case GL_STACK_UNDERFLOW:
+                    error = "GL_STACK_UNDERFLOW";
+                    break;
+                case GL_OUT_OF_MEMORY:
+                    error = "GL_OUT_OF_MEMORY";
+                    break;
+                default:
+                    error = "Unknown OpenGL error";
+                    break;
+            }
+            
+            if (error) {
+                LOG_ERR("OpenGL error during plot creation: " + std::string(error), "PlottingUtility");
             }
             
             // Render error text directly in ImGui
@@ -841,4 +875,84 @@ bool PlottingUtility::ensureFrameIsClean() {
         return true;
     }
     return false;
+}
+
+bool PlottingUtility::checkGLError() {
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR && error != lastGLError) {
+        lastGLError = error;
+        std::string errorStr = getGLErrorString(error);
+        LOG_ERR("OpenGL error: " + errorStr, "PlottingUtility");
+        return true;
+    }
+    lastGLError = error;
+    return false;
+}
+
+std::string PlottingUtility::getGLErrorString(GLenum error) {
+    switch (error) {
+        case GL_NO_ERROR:
+            return "GL_NO_ERROR";
+        case GL_INVALID_ENUM:
+            return "GL_INVALID_ENUM: An unacceptable value has been specified for an enumerated argument.";
+        case GL_INVALID_VALUE:
+            return "GL_INVALID_VALUE: A numeric argument is out of range.";
+        case GL_INVALID_OPERATION:
+            return "GL_INVALID_OPERATION: The specified operation is not allowed in the current state.";
+        case GL_STACK_OVERFLOW:
+            return "GL_STACK_OVERFLOW: Command would cause a stack overflow.";
+        case GL_STACK_UNDERFLOW:
+            return "GL_STACK_UNDERFLOW: Command would cause a stack underflow.";
+        case GL_OUT_OF_MEMORY:
+            return "GL_OUT_OF_MEMORY: There is not enough memory left to execute the command.";
+        default:
+            return "Unknown OpenGL error: " + std::to_string(error);
+    }
+}
+
+bool PlottingUtility::initializeOpenGL() {
+    LOG_INFO("Initializing OpenGL context", "PlottingUtility");
+    
+    try {
+        // Check if we have a valid OpenGL context
+        const GLubyte* version = glGetString(GL_VERSION);
+        if (!version) {
+            LOG_ERR("No valid OpenGL context found", "PlottingUtility");
+            return false;
+        }
+        LOG_INFO("OpenGL Version: " + std::string(reinterpret_cast<const char*>(version)), "PlottingUtility");
+
+        // Initialize ImGui OpenGL3 backend
+        if (!ImGui_ImplOpenGL3_Init("#version 130")) {
+            LOG_ERR("Failed to initialize ImGui OpenGL3 backend", "PlottingUtility");
+            return false;
+        }
+
+        // Enable depth testing
+        glEnable(GL_DEPTH_TEST);
+        if (checkGLError()) return false;
+
+        // Enable blending for transparency
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        if (checkGLError()) return false;
+
+        // Set up viewport
+        if (parentWidget) {
+            glViewport(0, 0, parentWidget->w(), parentWidget->h());
+            if (checkGLError()) return false;
+        }
+
+        // Clear color and depth buffers
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);  // White background
+        glClearDepth(1.0f);
+        if (checkGLError()) return false;
+
+        LOG_INFO("OpenGL initialization successful", "PlottingUtility");
+        return true;
+    }
+    catch (const std::exception& e) {
+        LOG_ERR("Exception during OpenGL initialization: " + std::string(e.what()), "PlottingUtility");
+        return false;
+    }
 }

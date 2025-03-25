@@ -1,17 +1,15 @@
 #include "imgui.h"
 #include "imgui_impl_fltk.h"
-#include "imgui_impl_opengl3.h"
 #include <FL/Fl_Window.H>
-#include <FL/Fl_Gl_Window.H>
-#include <FL/gl.h>
+#include <FL/fl_draw.H>
 #include <FL/Enumerations.H>  // For FLTK constants
 #include <ctime>              // For time handling
+#include <vector>
 
 // FLTK data
 struct ImGui_ImplFLTK_Data
 {
     Fl_Window* Window;
-    Fl_Gl_Window* GlWindow;
     bool MousePressed[3];
     bool MouseWheel;
     int MouseX, MouseY;
@@ -19,6 +17,11 @@ struct ImGui_ImplFLTK_Data
     bool HasFocus;
     int Width, Height;
     double Time;
+    
+    // Rendering data
+    std::vector<unsigned char> FontPixels;
+    int FontWidth;
+    int FontHeight;
 };
 
 static ImGui_ImplFLTK_Data* g_Data = nullptr;
@@ -33,7 +36,7 @@ static void ImGui_ImplFLTK_MouseCallback(Fl_Widget*, void*);
 static void ImGui_ImplFLTK_KeyboardCallback(Fl_Widget*, void*);
 static void ImGui_ImplFLTK_ResizeCallback(Fl_Widget*, void*);
 
-bool ImGui_ImplFLTK_Init(Fl_Window* window, Fl_Gl_Window* gl_window)
+bool ImGui_ImplFLTK_Init(Fl_Window* window)
 {
     // Check and create ImGui context if not already created
     if (!ImGui::GetCurrentContext())
@@ -43,11 +46,24 @@ bool ImGui_ImplFLTK_Init(Fl_Window* window, Fl_Gl_Window* gl_window)
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+        
+        // Initialize font system
+        unsigned char* pixels;
+        int width, height;
+        io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
+        
+        // Store font texture
+        g_Data = new ImGui_ImplFLTK_Data();
+        g_Data->FontPixels.resize(width * height * 4);
+        memcpy(g_Data->FontPixels.data(), pixels, g_Data->FontPixels.size());
+        g_Data->FontWidth = width;
+        g_Data->FontHeight = height;
     }
 
-    g_Data = new ImGui_ImplFLTK_Data();
+    if (!g_Data)
+        g_Data = new ImGui_ImplFLTK_Data();
+
     g_Data->Window = window;
-    g_Data->GlWindow = gl_window;
     g_Data->Time = 0.0;
     g_Data->MousePressed[0] = g_Data->MousePressed[1] = g_Data->MousePressed[2] = false;
     g_Data->MouseWheel = false;
@@ -62,15 +78,11 @@ bool ImGui_ImplFLTK_Init(Fl_Window* window, Fl_Gl_Window* gl_window)
     window->callback(ImGui_ImplFLTK_KeyboardCallback);
     window->callback(ImGui_ImplFLTK_ResizeCallback);
 
-    // Setup Platform/Renderer backends
-    ImGui_ImplOpenGL3_Init("#version 150");
-
     return true;
 }
 
 void ImGui_ImplFLTK_Shutdown()
 {
-    ImGui_ImplOpenGL3_Shutdown();
     ImGui::DestroyContext();
     delete g_Data;
     g_Data = nullptr;
@@ -79,7 +91,7 @@ void ImGui_ImplFLTK_Shutdown()
 void ImGui_ImplFLTK_NewFrame()
 {
     ImGuiIO& io = ImGui::GetIO();
-    IM_ASSERT(io.Fonts->IsBuilt() && "Font atlas not built! It is generally built by the renderer backend. Missing call to renderer _NewFrame() function? e.g. ImGui_ImplOpenGL3_NewFrame().");
+    IM_ASSERT(io.Fonts->IsBuilt() && "Font atlas not built! Missing call to renderer _NewFrame() function?");
 
     // Setup display size (every frame to accommodate for window resizing)
     io.DisplaySize = ImVec2((float)g_Data->Width, (float)g_Data->Height);
@@ -103,14 +115,122 @@ void ImGui_ImplFLTK_NewFrame()
 
 void ImGui_ImplFLTK_RenderDrawData(ImDrawData* draw_data)
 {
-    // Set up the OpenGL state for rendering
-    if (g_Data && g_Data->GlWindow) {
-        g_Data->GlWindow->make_current();
-        
-        // Simple version that doesn't try to save/restore OpenGL state
-        // Just render directly
-        ImGui_ImplOpenGL3_RenderDrawData(draw_data);
+    if (!g_Data || !g_Data->Window || !draw_data)
+        return;
+
+    // Scale coordinates for retina displays (if needed)
+    draw_data->ScaleClipRects(ImGui::GetIO().DisplayFramebufferScale);
+
+    // Set up FLTK drawing state
+    fl_push_matrix();
+    fl_push_clip(0, 0, g_Data->Width, g_Data->Height);
+
+    // Render command lists
+    for (int n = 0; n < draw_data->CmdListsCount; n++)
+    {
+        const ImDrawList* cmd_list = draw_data->CmdLists[n];
+        const ImDrawVert* vtx_buffer = cmd_list->VtxBuffer.Data;
+        const ImDrawIdx* idx_buffer = cmd_list->IdxBuffer.Data;
+
+        for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++)
+        {
+            const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
+            if (pcmd->UserCallback)
+            {
+                pcmd->UserCallback(cmd_list, pcmd);
+            }
+            else
+            {
+                // Project scissor/clipping rectangles into framebuffer space
+                ImVec4 clip_rect;
+                clip_rect.x = pcmd->ClipRect.x;
+                clip_rect.y = pcmd->ClipRect.y;
+                clip_rect.z = pcmd->ClipRect.z;
+                clip_rect.w = pcmd->ClipRect.w;
+
+                if (clip_rect.x < g_Data->Width && clip_rect.y < g_Data->Height &&
+                    clip_rect.z >= 0.0f && clip_rect.w >= 0.0f)
+                {
+                    // Apply scissor/clipping rectangle
+                    fl_push_clip(clip_rect.x, clip_rect.y,
+                               clip_rect.z - clip_rect.x,
+                               clip_rect.w - clip_rect.y);
+
+                    // Draw primitives
+                    for (unsigned int idx_offset = 0; idx_offset < pcmd->ElemCount;)
+                    {
+                        // Determine primitive type and handle accordingly
+                        if (idx_offset + 3 <= pcmd->ElemCount) // Triangle
+                        {
+                            // Get vertices of the triangle
+                            const ImDrawVert& v1 = vtx_buffer[idx_buffer[pcmd->IdxOffset + idx_offset]];
+                            const ImDrawVert& v2 = vtx_buffer[idx_buffer[pcmd->IdxOffset + idx_offset + 1]];
+                            const ImDrawVert& v3 = vtx_buffer[idx_buffer[pcmd->IdxOffset + idx_offset + 2]];
+
+                            // Draw filled triangle with vertex colors
+                            fl_begin_complex_polygon();
+                            
+                            // Convert ImGui colors (ABGR) to FLTK colors (RGB)
+                            ImU32 c1 = v1.col;
+                            ImU32 c2 = v2.col;
+                            ImU32 c3 = v3.col;
+                            
+                            fl_color((c1 >> 0) & 0xFF, (c1 >> 8) & 0xFF, (c1 >> 16) & 0xFF);
+                            fl_vertex(v1.pos.x, v1.pos.y);
+                            fl_color((c2 >> 0) & 0xFF, (c2 >> 8) & 0xFF, (c2 >> 16) & 0xFF);
+                            fl_vertex(v2.pos.x, v2.pos.y);
+                            fl_color((c3 >> 0) & 0xFF, (c3 >> 8) & 0xFF, (c3 >> 16) & 0xFF);
+                            fl_vertex(v3.pos.x, v3.pos.y);
+                            
+                            fl_end_complex_polygon();
+
+                            // Handle text if this vertex has texture coordinates
+                            if (pcmd->TextureId)
+                            {
+                                // Set up text rendering
+                                fl_font(FL_HELVETICA, 14);
+                                fl_color(FL_BLACK);
+                                
+                                // Draw text using FLTK's text rendering
+                                const char* text = (const char*)pcmd->TextureId;
+                                fl_draw(text, v1.pos.x, v1.pos.y);
+                            }
+
+                            idx_offset += 3;
+                        }
+                        else if (idx_offset + 2 <= pcmd->ElemCount) // Line
+                        {
+                            const ImDrawVert& v1 = vtx_buffer[idx_buffer[pcmd->IdxOffset + idx_offset]];
+                            const ImDrawVert& v2 = vtx_buffer[idx_buffer[pcmd->IdxOffset + idx_offset + 1]];
+
+                            ImU32 c1 = v1.col;
+                            fl_color((c1 >> 0) & 0xFF, (c1 >> 8) & 0xFF, (c1 >> 16) & 0xFF);
+                            fl_line(v1.pos.x, v1.pos.y, v2.pos.x, v2.pos.y);
+
+                            idx_offset += 2;
+                        }
+                        else // Point
+                        {
+                            const ImDrawVert& v1 = vtx_buffer[idx_buffer[pcmd->IdxOffset + idx_offset]];
+                            ImU32 c1 = v1.col;
+                            fl_color((c1 >> 0) & 0xFF, (c1 >> 8) & 0xFF, (c1 >> 16) & 0xFF);
+                            fl_point(v1.pos.x, v1.pos.y);
+                            idx_offset++;
+                        }
+                    }
+
+                    fl_pop_clip();
+                }
+            }
+        }
     }
+
+    // Restore FLTK state
+    fl_pop_clip();
+    fl_pop_matrix();
+
+    // Force window to redraw
+    g_Data->Window->redraw();
 }
 
 static void ImGui_ImplFLTK_UpdateMousePosAndButtons()

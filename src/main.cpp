@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
         // Initialize FLTK
         LOG_INFO("Initializing FLTK", "main");
         Fl::scheme("gtk+");  // Use a modern look and feel
-        Fl::visual(FL_DOUBLE | FL_RGB);
+        Fl::visual(FL_DOUBLE | FL_RGB | FL_OPENGL3);  // Added OpenGL3 support
         LOG_INFO("FLTK initialized", "main");
         
         // Initialize PlottingUtility

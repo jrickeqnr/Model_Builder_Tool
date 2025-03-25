@@ -158,10 +158,6 @@ ResultsView::~ResultsView() {
     if (plottingInitialized) {
         try {
             LOG_DEBUG("Cleaning up PlottingUtility", "ResultsView");
-            // Make sure we're in a clean state before cleanup
-            if (plotsPanel) {
-                plotsPanel->make_current();
-            }
             PlottingUtility::getInstance().cleanup();
             LOG_DEBUG("PlottingUtility cleanup successful", "ResultsView");
         } catch (const std::exception& e) {
@@ -203,8 +199,6 @@ void ResultsView::layout() {
     nextButton->resize(prevButton->x() + prevButton->w() + 10,
                       navigationGroup->y(),
                       100, 30);
-    
-    // Resize plot type label
     plotTypeLabel->resize(nextButton->x() + nextButton->w() + 10,
                          navigationGroup->y(),
                          navigationGroup->w() - (nextButton->x() + nextButton->w() + 20),
@@ -221,49 +215,61 @@ void ResultsView::layout() {
                         rightPanel->y() + rightPanel->h() - 40,
                         100, 30);
     
-    // Check if PlotGLWindow is initialized properly
-    plottingInitialized = plotsPanel->isInitialized();
-    
-    // Initialize plotting if we have a model and plots panel is initialized
-    if (model && plotsPanel && plottingInitialized) {
-        LOG_INFO("PlotGLWindow is initialized, creating plots", "ResultsView");
-        try {
-            createPlots();
-            updatePlotTypeLabel();
-        } catch (const std::exception& e) {
-            LOG_ERR("Exception creating plots: " + std::string(e.what()), "ResultsView");
-        }
+    // Force redraw of plots if we have data
+    if (model && dataFrame) {
+        createPlots();
     }
     
-    LOG_INFO("ResultsView::layout() completed", "ResultsView");
-}
-
-void ResultsView::cyclePlot(int direction) {
-    if (!plotsPanel || !plotsPanel->isInitialized()) return;
-    
-    currentPlotType = (currentPlotType + direction + 5) % 5;
-    updatePlotTypeLabel();
-    
-    // Set the new plot type and redraw
-    plotsPanel->setPlotType(static_cast<PlotGLWindow::PlotType>(currentPlotType));
-    plotsPanel->redraw();
-    
-    // Force a redraw of the label
-    plotTypeLabel->redraw();
-    
-    // Force a redraw of the entire view
+    // Redraw everything
     redraw();
 }
 
+void ResultsView::cyclePlot(int direction) {
+    LOG_INFO("Cycling plot with direction: " + std::to_string(direction), "ResultsView");
+    
+    if (!model || !dataFrame) {
+        LOG_WARN("Cannot cycle plot: no model or data available", "ResultsView");
+        return;
+    }
+    
+    // Calculate new plot type
+    int numPlotTypes = 5;  // Total number of plot types
+    currentPlotType = (currentPlotType + direction + numPlotTypes) % numPlotTypes;
+    
+    // Create the new plot
+    createPlots();
+    
+    // Update the plot type label
+    updatePlotTypeLabel();
+}
+
 void ResultsView::updatePlotTypeLabel() {
-    const char* plotTypes[] = {
-        "Scatter Plot",
-        "Time Series",
-        "Residual Plot",
-        "Importance Plot",
-        "Learning Curve"
-    };
-    plotTypeLabel->label(plotTypes[currentPlotType]);
+    if (!plotTypeLabel) return;
+    
+    std::string label;
+    switch (currentPlotType) {
+        case 0:
+            label = "Actual vs Predicted";
+            break;
+        case 1:
+            label = "Residuals";
+            break;
+        case 2:
+            label = "Time Series";
+            break;
+        case 3:
+            label = "Feature Importance";
+            break;
+        case 4:
+            label = "Learning Curve";
+            break;
+        default:
+            label = "Unknown Plot Type";
+            break;
+    }
+    
+    plotTypeLabel->copy_label(label.c_str());
+    plotTypeLabel->redraw();
 }
 
 void ResultsView::draw() {
@@ -282,11 +288,9 @@ void ResultsView::render() {
     }
     
     try {
-        LOG_DEBUG("Setting up OpenGL context for rendering", "ResultsView");
+        LOG_DEBUG("Rendering plots", "ResultsView");
         
-        // Make sure the GL window is current and redraw it
-        // The PlotGLWindow will handle all the rendering internally
-        plotsPanel->make_current();
+        // Simply redraw the plot panel - it will handle its own rendering
         plotsPanel->redraw();
         
         LOG_DEBUG("Plots rendered successfully", "ResultsView");
@@ -450,102 +454,110 @@ void ResultsView::createPlots() {
     LOG_INFO("Creating plots for model", "ResultsView");
     
     if (!model || !dataFrame) {
-        LOG_ERR("Cannot create plots: model=" + std::to_string(reinterpret_cast<uintptr_t>(model.get())) + 
-                ", dataFrame=" + std::to_string(reinterpret_cast<uintptr_t>(dataFrame.get())), 
-                "ResultsView");
+        LOG_ERR("Cannot create plots: model or dataFrame is null", "ResultsView");
         return;
     }
     
-    if (!plotsPanel || !plotsPanel->isInitialized()) {
-        LOG_ERR("Cannot create plots: PlotGLWindow not initialized", "ResultsView");
+    if (!plotsPanel) {
+        LOG_ERR("Cannot create plots: PlotGLWindow is null", "ResultsView");
         return;
     }
     
     try {
-        // Set the initial plot type to Scatter, which is also the first one we create
-        currentPlotType = 0; // 0 = Scatter plot
-        
         // Get actual and predicted values
         std::vector<double> actual = dataFrame->getColumn(model->getTargetName());
-        std::vector<double> predicted;
-        Eigen::VectorXd predictedEigen = model->predict(dataFrame->toMatrix(model->getVariableNames()));
-        predicted.resize(predictedEigen.size());
-        Eigen::VectorXd::Map(&predicted[0], predictedEigen.size()) = predictedEigen;
+        
+        // Get feature matrix and make predictions
+        Eigen::MatrixXd featureMatrix = dataFrame->toMatrix(model->getVariableNames());
+        Eigen::VectorXd predictedEigen = model->predict(featureMatrix);
+        
+        // Convert predictions to vector
+        std::vector<double> predicted(predictedEigen.data(), predictedEigen.data() + predictedEigen.size());
+        
+        if (actual.empty() || predicted.empty()) {
+            LOG_ERR("No data available for plotting", "ResultsView");
+            return;
+        }
         
         LOG_INFO("Creating plots with " + std::to_string(actual.size()) + " data points", "ResultsView");
         
-        // Create scatter plot of actual vs predicted values
-        LOG_DEBUG("Creating scatter plot", "ResultsView");
-        plotsPanel->createScatterPlot(
-            actual, predicted,
-            "Actual vs Predicted Values",
-            "Actual Values",
-            "Predicted Values"
-        );
-        
-        // Calculate and create residual plot
-        LOG_DEBUG("Creating residual plot", "ResultsView");
-        std::vector<double> residuals;
-        residuals.reserve(actual.size());
-        for (size_t i = 0; i < actual.size(); ++i) {
-            residuals.push_back(actual[i] - predicted[i]);
-        }
-        plotsPanel->createResidualPlot(
-            predicted, residuals,
-            "Residual Plot"
-        );
-        
-        // Create time series plot
-        LOG_DEBUG("Creating time series plot", "ResultsView");
-        plotsPanel->createTimeSeriesPlot(
-            actual, predicted,
-            "Time Series Plot"
-        );
-        
-        // Add feature importance plot if model supports it
-        if (model->supportsFeatureImportance()) {
-            LOG_DEBUG("Creating importance plot", "ResultsView");
-            try {
-                // Get feature importance from model
-                auto importance = model->getFeatureImportance();
-                plotsPanel->createImportancePlot(
-                    importance,
-                    "Feature Importance"
+        switch (currentPlotType) {
+            case 0: // Scatter plot
+                plotsPanel->createScatterPlot(
+                    actual, predicted,
+                    "Actual vs Predicted Values",
+                    "Actual Values",
+                    "Predicted Values"
                 );
-            } catch (const std::exception& e) {
-                LOG_ERR("Error creating importance plot: " + std::string(e.what()), "ResultsView");
-            }
-        }
-        
-        // Add learning curve if model supports it
-        if (model->supportsLearningCurve()) {
-            LOG_DEBUG("Creating learning curve plot", "ResultsView");
-            try {
-                // Get learning curve data from model
-                std::vector<double> trainSizes;
-                std::vector<double> trainScores;
-                std::vector<double> validScores;
+                break;
                 
-                // Some models might have learning curve data available
-                model->getLearningCurve(trainSizes, trainScores, validScores);
-                // Check if we got valid data after the call
-                if (!trainSizes.empty() && !trainScores.empty() && !validScores.empty()) {
-                    plotsPanel->createLearningCurvePlot(
-                        trainSizes, trainScores, validScores,
-                        "Learning Curve"
+            case 1: // Residual plot
+                {
+                    std::vector<double> residuals;
+                    residuals.reserve(actual.size());
+                    for (size_t i = 0; i < actual.size(); ++i) {
+                        residuals.push_back(actual[i] - predicted[i]);
+                    }
+                    plotsPanel->createResidualPlot(
+                        predicted, residuals,
+                        "Residual Plot"
                     );
                 }
-            } catch (const std::exception& e) {
-                LOG_ERR("Error creating learning curve plot: " + std::string(e.what()), "ResultsView");
-            }
+                break;
+                
+            case 2: // Time series plot
+                plotsPanel->createTimeSeriesPlot(
+                    actual, predicted,
+                    "Time Series Comparison"
+                );
+                break;
+                
+            case 3: // Feature importance plot
+                if (auto importanceMap = model->getFeatureImportance(); !importanceMap.empty()) {
+                    plotsPanel->createImportancePlot(
+                        importanceMap,
+                        "Feature Importance"
+                    );
+                } else {
+                    LOG_WARN("Feature importance not available for this model", "ResultsView");
+                    // Fall back to scatter plot
+                    currentPlotType = 0;
+                    createPlots();
+                }
+                break;
+                
+            case 4: // Learning curve plot
+                if (model->supportsLearningCurve()) {
+                    std::vector<double> trainSizes, trainScores, valScores;
+                    model->getLearningCurve(trainSizes, trainScores, valScores);
+                    
+                    if (!trainSizes.empty() && !trainScores.empty() && !valScores.empty()) {
+                        plotsPanel->createLearningCurvePlot(
+                            trainSizes, trainScores, valScores,
+                            "Learning Curve"
+                        );
+                    } else {
+                        LOG_WARN("Learning curve data is empty", "ResultsView");
+                        // Fall back to scatter plot
+                        currentPlotType = 0;
+                        createPlots();
+                    }
+                } else {
+                    LOG_WARN("Learning curve not supported by this model", "ResultsView");
+                    // Fall back to scatter plot
+                    currentPlotType = 0;
+                    createPlots();
+                }
+                break;
+                
+            default:
+                LOG_ERR("Unknown plot type: " + std::to_string(currentPlotType), "ResultsView");
+                break;
         }
         
-        // Force redraw to show the initial plot
-        plotsPanel->setPlotType(static_cast<PlotGLWindow::PlotType>(currentPlotType));
         updatePlotTypeLabel();
         plotsPanel->redraw();
         
-        LOG_INFO("All plots created successfully", "ResultsView");
     } catch (const std::exception& e) {
         LOG_ERR("Exception during plot creation: " + std::string(e.what()), "ResultsView");
     }
@@ -563,5 +575,84 @@ void ResultsView::exportButtonCallback(Fl_Widget* w, void* data) {
     if (view) {
         LOG_INFO("Export button clicked", "ResultsView");
         view->exportResults();
+    }
+}
+
+void ResultsView::updatePlots() {
+    LOG_INFO("Updating plots in ResultsView", "ResultsView");
+    
+    try {
+        if (!plotsPanel) {
+            LOG_ERR("Plot panel is null", "ResultsView");
+            return;
+        }
+        
+        // Update the plot based on current data
+        if (currentData.empty()) {
+            LOG_WARN("No data available for plotting", "ResultsView");
+            return;
+        }
+        
+        // Create scatter plot
+        plotsPanel->createScatterPlot(
+            currentData["actual"],
+            currentData["predicted"],
+            "Actual vs Predicted Values",
+            "Actual Values",
+            "Predicted Values"
+        );
+        
+        // Force a redraw of the plot panel
+        plotsPanel->redraw();
+        
+    } catch (const std::exception& e) {
+        LOG_ERR("Exception in updatePlots: " + std::string(e.what()), "ResultsView");
+    }
+}
+
+void ResultsView::exportPlot() {
+    LOG_INFO("Exporting plot", "ResultsView");
+    
+    try {
+        if (!plotsPanel) {
+            LOG_ERR("Plot panel is null", "ResultsView");
+            return;
+        }
+        
+        // Get the current plot type
+        auto plotType = plotsPanel->getPlotType();
+        
+        // Create export dialog
+        ExportDialog* dialog = new ExportDialog(plotType);
+        dialog->show();
+        
+        // Wait for user input
+        while (dialog->shown()) {
+            Fl::wait();
+        }
+        
+        // If dialog was cancelled, clean up and return
+        if (!dialog->wasConfirmed()) {
+            LOG_INFO("Plot export cancelled by user", "ResultsView");
+            delete dialog;
+            return;
+        }
+        
+        // Get export settings from dialog
+        std::string filename = dialog->getFilename();
+        int width = dialog->getWidth();
+        int height = dialog->getHeight();
+        
+        // Clean up dialog
+        delete dialog;
+        
+        // Force a redraw of the plot panel with the new dimensions
+        plotsPanel->size(width, height);
+        plotsPanel->redraw();
+        
+        LOG_INFO("Plot exported successfully to: " + filename, "ResultsView");
+        
+    } catch (const std::exception& e) {
+        LOG_ERR("Exception in exportPlot: " + std::string(e.what()), "ResultsView");
     }
 }

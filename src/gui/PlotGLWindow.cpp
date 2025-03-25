@@ -1,4 +1,6 @@
 #include "gui/PlotGLWindow.h"
+#include <FL/fl_draw.H>
+#include "../backends/imgui_impl_fltk.h"
 
 // Standard library headers
 #include <algorithm>
@@ -6,19 +8,16 @@
 #include <cmath>
 #include <stdexcept>
 
-// ImGui backend headers
-#include "../backends/imgui_impl_fltk.h"
-#include "../backends/imgui_impl_opengl3.h"
-
 PlotGLWindow::PlotGLWindow(int x, int y, int w, int h, const char* label)
-    : Fl_Gl_Window(x, y, w, h, label), initialized(false) {
-    // Set up proper OpenGL mode for modern usage
-    mode(FL_RGB | FL_DOUBLE | FL_DEPTH | FL_OPENGL3 | FL_STENCIL);
+    : Fl_Gl_Window(x, y, w, h, label), initialized(false), currentPlotType(PlotType::Scatter)
+{
+    mode(FL_RGB | FL_ALPHA | FL_DOUBLE | FL_OPENGL3);
     
     LOG_INFO("PlotGLWindow constructor", "PlotGLWindow");
 }
 
-PlotGLWindow::~PlotGLWindow() {
+PlotGLWindow::~PlotGLWindow()
+{
     LOG_INFO("PlotGLWindow destructor - cleaning up resources", "PlotGLWindow");
     
     if (initialized) {
@@ -30,10 +29,10 @@ PlotGLWindow::~PlotGLWindow() {
     }
 }
 
-void PlotGLWindow::draw() {
-    if (!valid()) {
+void PlotGLWindow::draw()
+{
+    if (!context_valid()) {
         valid(1);
-        glViewport(0, 0, w(), h());
         
         // Initialize ImGui if not already done
         if (!initialized) {
@@ -46,11 +45,10 @@ void PlotGLWindow::draw() {
     }
     
     // Clear the background
-    glClearColor(0.9f, 0.9f, 0.9f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
     // Start new ImGui frame
-    ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplFLTK_NewFrame();
     ImGui::NewFrame();
     
@@ -65,51 +63,20 @@ void PlotGLWindow::draw() {
                                   ImGuiWindowFlags_NoCollapse;
     
     if (ImGui::Begin("##PlotWindow", nullptr, window_flags)) {
-        // Calculate plot size to fill most of the window
-        ImVec2 availSize = ImGui::GetContentRegionAvail();
-        ImVec2 plotSize(availSize.x * 0.95f, availSize.y * 0.95f);
-        
-        // Render the appropriate plot based on type
-        LOG_DEBUG("Rendering plot of type: " + std::to_string(static_cast<int>(currentPlotType)), "PlotGLWindow");
-        
-        switch (currentPlotType) {
-            case PlotType::Scatter:
-                renderScatterPlot();
-                break;
-            case PlotType::TimeSeries:
-                renderTimeSeriesPlot();
-                break;
-            case PlotType::Residual:
-                renderResidualPlot();
-                break;
-            case PlotType::Importance:
-                renderImportancePlot();
-                break;
-            case PlotType::LearningCurve:
-                renderLearningCurvePlot();
-                break;
-            default:
-                ImGui::Text("No plot type selected");
-                break;
-        }
+        renderPlot();
     }
     ImGui::End();
     
     // Render ImGui
     ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    
-    // We need to explicitly swap the buffers for OpenGL double-buffering
-    swap_buffers();
+    ImGui_ImplFLTK_RenderDrawData(ImGui::GetDrawData());
 }
 
-bool PlotGLWindow::initializeImGui() {
+bool PlotGLWindow::initializeImGui()
+{
     LOG_INFO("Initializing ImGui and ImPlot", "PlotGLWindow");
     
     try {
-        // Ensure OpenGL context is current
-        make_current();
-        
         // Initialize ImGui context
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
@@ -117,19 +84,13 @@ bool PlotGLWindow::initializeImGui() {
         // Initialize ImPlot context
         ImPlot::CreateContext();
         
-        // Configure ImGui IO and build fonts
+        // Configure ImGui IO
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.Fonts->Build();  // Build fonts before backend init
         
-        // Initialize ImGui OpenGL3 backend first
-        if (!ImGui_ImplOpenGL3_Init("#version 150")) {
-            LOG_ERR("Failed to initialize ImGui OpenGL3 backend", "PlotGLWindow");
-            return false;
-        }
-        
-        // Initialize ImGui FLTK backend second
-        if (!ImGui_ImplFLTK_Init(window(), this)) {
+        // Initialize ImGui FLTK backend
+        if (!ImGui_ImplFLTK_Init(window())) {
             LOG_ERR("Failed to initialize ImGui FLTK backend", "PlotGLWindow");
             return false;
         }
@@ -152,7 +113,8 @@ bool PlotGLWindow::initializeImGui() {
     }
 }
 
-void PlotGLWindow::cleanupImGui() {
+void PlotGLWindow::cleanupImGui()
+{
     LOG_INFO("Cleaning up ImGui and ImPlot resources", "PlotGLWindow");
     
     // End any in-progress ImGui frame
@@ -165,8 +127,7 @@ void PlotGLWindow::cleanupImGui() {
         }
     }
     
-    // Shutdown ImGui backends
-    ImGui_ImplOpenGL3_Shutdown();
+    // Shutdown ImGui backend
     ImGui_ImplFLTK_Shutdown();
     
     // Destroy ImPlot context
@@ -180,6 +141,37 @@ void PlotGLWindow::cleanupImGui() {
     }
     
     initialized = false;
+}
+
+void PlotGLWindow::renderPlot()
+{
+    // Calculate plot size to fill most of the window
+    ImVec2 availSize = ImGui::GetContentRegionAvail();
+    ImVec2 plotSize(availSize.x * 0.95f, availSize.y * 0.95f);
+    
+    // Render the appropriate plot based on type
+    LOG_DEBUG("Rendering plot of type: " + std::to_string(static_cast<int>(currentPlotType)), "PlotGLWindow");
+    
+    switch (currentPlotType) {
+        case PlotType::Scatter:
+            renderScatterPlot();
+            break;
+        case PlotType::TimeSeries:
+            renderTimeSeriesPlot();
+            break;
+        case PlotType::Residual:
+            renderResidualPlot();
+            break;
+        case PlotType::Importance:
+            renderImportancePlot();
+            break;
+        case PlotType::LearningCurve:
+            renderLearningCurvePlot();
+            break;
+        default:
+            ImGui::Text("No plot type selected");
+            break;
+    }
 }
 
 void PlotGLWindow::createScatterPlot(
@@ -627,39 +619,12 @@ void PlotGLWindow::renderLearningCurvePlot() {
 }
 
 void PlotGLWindow::drawErrorMessage(const std::string& message) {
-    // Draw a red rectangle with text for error messages
-    glColor3f(1.0f, 0.0f, 0.0f);
-    glBegin(GL_QUADS);
-    glVertex2f(10.0f, 10.0f);
-    glVertex2f(w() - 10.0f, 10.0f);
-    glVertex2f(w() - 10.0f, 50.0f);
-    glVertex2f(10.0f, 50.0f);
-    glEnd();
+    // Draw error message using FLTK primitives instead of OpenGL
+    fl_color(FL_RED);
+    fl_rectf(10, 10, w() - 20, 40);
+    fl_color(FL_WHITE);
+    fl_font(FL_HELVETICA, 12);
+    fl_draw(message.c_str(), 15, 30);
     
-    // We can't easily draw text with raw OpenGL, so we just draw the rectangle
-    // The error message is logged but not displayed
     LOG_ERR("Error message: " + message, "PlotGLWindow");
-}
-
-void PlotGLWindow::drawTestRectangle() {
-    // Draw a red test rectangle to verify OpenGL is working
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, w(), h(), 0, -1, 1);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    
-    glColor3f(1.0f, 0.0f, 0.0f);  // Red color
-    glBegin(GL_QUADS);
-    glVertex2f(50.0f, 50.0f);
-    glVertex2f(150.0f, 50.0f);
-    glVertex2f(150.0f, 150.0f);
-    glVertex2f(50.0f, 150.0f);
-    glEnd();
-    
-    // Check if rectangle drawing had errors
-    GLenum err = glGetError();
-    if (err != GL_NO_ERROR) {
-        LOG_ERR("OpenGL error after drawing rectangle: " + std::to_string(err), "PlotGLWindow");
-    }
 } 
