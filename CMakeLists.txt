@@ -145,46 +145,6 @@ set(SOURCES
 # Create executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-# Copy Python DLLs to output directory
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-    COMMAND ${CMAKE_COMMAND} -E echo "Copying Python DLLs from ${PYTHON_ROOT_DIR} to $<TARGET_FILE_DIR:${PROJECT_NAME}>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${PYTHON_ROOT_DIR}/python313.dll"
-        "${PYTHON_ROOT_DIR}/python3.dll"
-        "${PYTHON_ROOT_DIR}/vcruntime140.dll"
-        "${PYTHON_ROOT_DIR}/vcruntime140_1.dll"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-    COMMAND ${CMAKE_COMMAND} -E echo "Copying Python extensions from ${PYTHON_DLL_DIR} to $<TARGET_FILE_DIR:${PROJECT_NAME}>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${PYTHON_DLL_DIR}/_ssl.pyd"
-        "${PYTHON_DLL_DIR}/_socket.pyd"
-        "${PYTHON_DLL_DIR}/_hashlib.pyd"
-        "${PYTHON_DLL_DIR}/select.pyd"
-        "${PYTHON_DLL_DIR}/unicodedata.pyd"
-        "${PYTHON_DLL_DIR}/_bz2.pyd"
-        "${PYTHON_DLL_DIR}/_lzma.pyd"
-        "${PYTHON_DLL_DIR}/pyexpat.pyd"
-        "${PYTHON_DLL_DIR}/libcrypto-3.dll"
-        "${PYTHON_DLL_DIR}/libssl-3.dll"
-        "${PYTHON_DLL_DIR}/sqlite3.dll"
-        "${PYTHON_DLL_DIR}/libffi-8.dll"
-        "${PYTHON_DLL_DIR}/zlib1.dll"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-)
-
-# Copy Python packages to output directory
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${PROJECT_NAME}>/numpy"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${PROJECT_NAME}>/matplotlib"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${PYTHON_SITE_PACKAGES}/numpy"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/numpy"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${PYTHON_SITE_PACKAGES}/matplotlib"
-        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/matplotlib"
-)
-
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${Python3_LIBRARIES}
