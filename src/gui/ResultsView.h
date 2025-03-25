@@ -19,6 +19,7 @@
 #include "models/Model.h"
 #include "data/DataFrame.h"
 #include "utils/PlottingUtility.h"
+#include "gui/PlotGLWindow.h"  // Include the custom window header
 
 /**
  * @brief View for displaying model results
@@ -81,7 +82,7 @@ private:
     Fl_Button* prevButton;
     Fl_Button* nextButton;
     Fl_Box* plotTypeLabel;
-    Fl_Gl_Window* plotsPanel;
+    PlotGLWindow* plotsPanel;  // Changed to our custom class
     Fl_Button* exportButton;
     
     // Model data

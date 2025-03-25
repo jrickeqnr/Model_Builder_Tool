@@ -183,6 +183,14 @@ public:
     }
     
     /**
+     * @brief Get the current plot type
+     * @return The current plot type
+     */
+    PlotData::Type getCurrentPlotType() const {
+        return currentPlot.type;
+    }
+    
+    /**
      * @brief Render the current plot
      */
     void render();
@@ -192,6 +200,22 @@ public:
      */
     void clear();
 
+    /**
+     * @brief Ensure ImGui frame state is clean before starting a new frame
+     * @return True if a frame was ended, false otherwise
+     */
+    bool ensureFrameIsClean();
+    
+    /**
+     * @brief Safely end any in-progress ImGui frame
+     */
+    void safeEndImGuiFrame();
+    
+    /**
+     * @brief Set up the ImPlot style
+     */
+    void setupPlotStyle();
+
 private:
     // Private constructor for singleton
     PlottingUtility() : initialized(false), parentWidget(nullptr) {}
@@ -200,11 +224,6 @@ private:
     bool initialized;
     Fl_Widget* parentWidget;
     PlotData currentPlot;
-    
-    /**
-     * @brief Set up the ImPlot style
-     */
-    void setupPlotStyle();
     
     /**
      * @brief Render a plot window with the given title and dimensions

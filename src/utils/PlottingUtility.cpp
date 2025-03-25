@@ -70,9 +70,9 @@ bool PlottingUtility::initialize(Fl_Widget* parent) {
             return false;
         }
         
-        // Initialize ImGui OpenGL3 backend
-        LOG_DEBUG("Initializing ImGui OpenGL3 backend", "PlottingUtility");
-        if (!ImGui_ImplOpenGL3_Init("#version 130")) {
+        // Initialize ImGui OpenGL3 backend with older version for better compatibility
+        LOG_DEBUG("Initializing ImGui OpenGL3 backend with compatibility version", "PlottingUtility");
+        if (!ImGui_ImplOpenGL3_Init("#version 120")) {
             LOG_ERR("Failed to initialize ImGui OpenGL3 backend", "PlottingUtility");
             return false;
         }
@@ -115,23 +115,55 @@ bool PlottingUtility::initialize(Fl_Widget* parent) {
 }
 
 void PlottingUtility::cleanup() {
-    LOG_INFO("Cleaning up PlottingUtility", "PlottingUtility");
+    LOG_INFO("Cleaning up PlottingUtility resources", "PlottingUtility");
     
-    // Shutdown ImGui backends
-    LOG_DEBUG("Shutting down ImGui OpenGL3 backend", "PlottingUtility");
-    ImGui_ImplOpenGL3_Shutdown();
+    if (!initialized) {
+        LOG_WARN("PlottingUtility::cleanup called but not initialized", "PlottingUtility");
+        return;
+    }
     
-    LOG_DEBUG("Shutting down ImGui FLTK backend", "PlottingUtility");
-    ImGui_ImplFLTK_Shutdown();
-    
-    // Destroy ImPlot and ImGui contexts
-    LOG_DEBUG("Destroying ImPlot context", "PlottingUtility");
-    ImPlot::DestroyContext();
-    
-    LOG_DEBUG("Destroying ImGui context", "PlottingUtility");
-    ImGui::DestroyContext();
-    
-    LOG_INFO("PlottingUtility cleanup complete", "PlottingUtility");
+    try {
+        // End any in-progress ImGui frame
+        safeEndImGuiFrame();
+        
+        // Shutdown ImGui backends
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplFLTK_Shutdown();
+        
+        // Destroy ImPlot context
+        if (ImPlot::GetCurrentContext()) {
+            ImPlot::DestroyContext();
+        }
+        
+        // Destroy ImGui context
+        if (ImGui::GetCurrentContext()) {
+            ImGui::DestroyContext();
+        }
+        
+        initialized = false;
+        parentWidget = nullptr;
+        
+        LOG_INFO("PlottingUtility cleanup completed successfully", "PlottingUtility");
+    }
+    catch (const std::exception& e) {
+        LOG_ERR("Exception during PlottingUtility cleanup: " + std::string(e.what()), "PlottingUtility");
+    }
+}
+
+void PlottingUtility::safeEndImGuiFrame() {
+    if (ImGui::GetCurrentContext()) {
+        // Check if we're in a frame that needs ending
+        if (ImGui::GetFrameCount() > 0) {
+            LOG_WARN("Ending in-progress ImGui frame during cleanup", "PlottingUtility");
+            try {
+                ImGui::EndFrame();
+                ImGui::Render();
+            }
+            catch (const std::exception& e) {
+                LOG_ERR("Error ending ImGui frame: " + std::string(e.what()), "PlottingUtility");
+            }
+        }
+    }
 }
 
 void PlottingUtility::setupPlotStyle() {
@@ -254,6 +286,7 @@ void PlottingUtility::createScatterPlot(
     currentPlot.height = height;
     
     LOG_INFO("Scatter plot created with " + std::to_string(actual.size()) + " points", "PlottingUtility");
+    LOG_INFO("Current plot type is now: " + std::to_string(static_cast<int>(currentPlot.type)), "PlottingUtility");
 }
 
 void PlottingUtility::createTimeSeriesPlot(
@@ -427,60 +460,77 @@ void PlottingUtility::render() {
         glClearColor(0.9f, 0.9f, 0.9f, 1.0f);  // Light gray background
         glClear(GL_COLOR_BUFFER_BIT);
         
+        // Check for OpenGL errors
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR) {
+            LOG_ERR("OpenGL error: " + std::to_string(err), "PlottingUtility");
+        }
+        
+        // Check OpenGL version
+        const char* glVersion = (const char*)glGetString(GL_VERSION);
+        LOG_INFO("OpenGL Version: " + std::string(glVersion ? glVersion : "unknown"), "PlottingUtility");
+        
+        // Draw a test rectangle to verify OpenGL is working
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(0, gl_window->w(), gl_window->h(), 0, -1, 1);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+        
+        glColor3f(1.0f, 0.0f, 0.0f);  // Red color
+        glBegin(GL_QUADS);
+        glVertex2f(50.0f, 50.0f);
+        glVertex2f(150.0f, 50.0f);
+        glVertex2f(150.0f, 150.0f);
+        glVertex2f(50.0f, 150.0f);
+        glEnd();
+        
+        // Check if rectangle drawing had errors
+        err = glGetError();
+        if (err != GL_NO_ERROR) {
+            LOG_ERR("OpenGL error after drawing rectangle: " + std::to_string(err), "PlottingUtility");
+        } else {
+            LOG_INFO("Test rectangle drawn successfully", "PlottingUtility");
+        }
+        
         LOG_DEBUG("OpenGL state set up", "PlottingUtility");
         
-        // Start new frame
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplFLTK_NewFrame();
-        ImGui::NewFrame();
+        // Make sure ImGui frame state is clean before starting new frame
+        ensureFrameIsClean();
         
-        LOG_DEBUG("ImGui frame started", "PlottingUtility");
-        
-        // Set up the window to fill the GL window
-        ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImVec2(gl_window->w(), gl_window->h()));
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | 
-                                      ImGuiWindowFlags_NoResize | 
-                                      ImGuiWindowFlags_NoMove | 
-                                      ImGuiWindowFlags_NoScrollbar |
-                                      ImGuiWindowFlags_NoCollapse;
-        
-        LOG_DEBUG("Current plot type: " + std::to_string(static_cast<int>(currentPlot.type)), "PlottingUtility");
-        
-        // Set up ImGui style for better visibility
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.9f, 0.9f, 0.9f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
-        
-        if (ImGui::Begin("Plot Window", nullptr, window_flags)) {
-            LOG_DEBUG("ImGui window created successfully", "PlottingUtility");
+        // Start new frame and render with proper exception handling
+        try {
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplFLTK_NewFrame();
+            ImGui::NewFrame();
             
-            // Add navigation buttons at the top
+            LOG_DEBUG("ImGui frame started", "PlottingUtility");
+            
+            // Don't create a redundant window - directly render the plot content
+            LOG_DEBUG("Current plot type: " + std::to_string(static_cast<int>(currentPlot.type)), "PlottingUtility");
+            
+            // Make sure we have a valid window context for ImPlot
+            ImGui::Begin("##PlotWindow", nullptr, ImGuiWindowFlags_NoTitleBar | 
+                                                ImGuiWindowFlags_NoResize | 
+                                                ImGuiWindowFlags_NoScrollbar | 
+                                                ImGuiWindowFlags_NoCollapse);
+            
+            // Calculate plot size to fill the entire area
+            ImVec2 plotSize(gl_window->w() - 20, gl_window->h() - 100);  // Leave some padding
+            
+            // Set plot style with light theme
+            ImPlot::PushStyleColor(ImPlotCol_FrameBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+            ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+            ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
+            
+            // Provide some padding
+            ImGui::SetCursorPos(ImVec2(10, 10));
+            
+            // Add navigation buttons at the top if needed
             ImGui::BeginGroup();
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10, 10));
             
-            // Previous button
-            if (ImGui::Button("Previous", ImVec2(100, 30))) {
-                int currentType = static_cast<int>(currentPlot.type);
-                currentType = (currentType - 1 + 5) % 5;  // Cycle through 0-4
-                currentPlot.type = static_cast<PlotData::Type>(currentType);
-                LOG_DEBUG("Switching to plot type: " + std::to_string(currentType), "PlottingUtility");
-            }
-            
-            ImGui::SameLine();
-            
-            // Next button
-            if (ImGui::Button("Next", ImVec2(100, 30))) {
-                int currentType = static_cast<int>(currentPlot.type);
-                currentType = (currentType + 1) % 5;  // Cycle through 0-4
-                currentPlot.type = static_cast<PlotData::Type>(currentType);
-                LOG_DEBUG("Switching to plot type: " + std::to_string(currentType), "PlottingUtility");
-            }
-            
-            ImGui::SameLine();
-            
-            // Plot type label
+            // Plot type label - just show the title
             const char* plotTypeNames[] = {
                 "Scatter Plot",
                 "Time Series",
@@ -488,26 +538,23 @@ void PlottingUtility::render() {
                 "Importance Plot",
                 "Learning Curve"
             };
-            ImGui::Text("Current: %s", plotTypeNames[static_cast<int>(currentPlot.type)]);
+            
+            // Display the current plot's title
+            if (!currentPlot.title.empty()) {
+                ImGui::Text("%s", currentPlot.title.c_str());
+            } else {
+                ImGui::Text("%s", plotTypeNames[static_cast<int>(currentPlot.type)]);
+            }
             
             ImGui::PopStyleVar();
             ImGui::EndGroup();
             
             ImGui::Separator();
             
-            // Calculate plot size to fill remaining space
-            ImVec2 windowSize = ImGui::GetWindowSize();
-            ImVec2 plotSize(windowSize.x - 20, windowSize.y - 100);  // Leave space for buttons
-            
-            LOG_DEBUG("Plot window size: " + std::to_string(windowSize.x) + "x" + std::to_string(windowSize.y), 
-                      "PlottingUtility");
-            
-            // Set plot style with light theme
-            ImPlot::PushStyleColor(ImPlotCol_FrameBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-            ImPlot::PushStyleColor(ImPlotCol_PlotBg, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
-            ImPlot::PushStyleColor(ImPlotCol_Line, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
-            
             // Render the appropriate plot based on type
+            LOG_INFO("About to render plot of type: " + std::to_string(static_cast<int>(currentPlot.type)) + 
+                    " - Title: " + currentPlot.title, "PlottingUtility");
+            
             switch (currentPlot.type) {
                 case PlotData::Type::Scatter:
                     renderScatterPlot();
@@ -531,16 +578,26 @@ void PlottingUtility::render() {
             }
             
             ImPlot::PopStyleColor(3);
-            ImGui::PopStyleColor(4);  // Pop the ImGui style colors we pushed
+            
+            // End the ImGui window we created
             ImGui::End();
-            LOG_DEBUG("ImGui window ended", "PlottingUtility");
-        } else {
-            LOG_ERR("Failed to create ImGui window", "PlottingUtility");
+            
+            // End frame and render
+            ImGui::Render();
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         }
-        
-        // End frame and render
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        catch (const std::exception& e) {
+            LOG_ERR("Exception during ImGui rendering: " + std::string(e.what()), "PlottingUtility");
+            
+            // Make sure to end the ImGui frame if an exception occurred
+            if (ImGui::GetCurrentContext() && ImGui::GetFrameCount() > 0) {
+                LOG_WARN("Ending ImGui frame after exception", "PlottingUtility");
+                ImGui::EndFrame();
+                ImGui::Render(); // Render an empty frame
+            }
+            
+            throw; // Rethrow the exception
+        }
         
         // Swap buffers
         gl_window->swap_buffers();
@@ -564,17 +621,35 @@ void PlottingUtility::renderScatterPlot() {
         ImPlotFlags flags = ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus;
         ImPlotAxisFlags axisFlags = ImPlotAxisFlags_AutoFit;
         
-        // Begin plot with explicit size
-        ImVec2 plotSize = ImGui::GetContentRegionAvail();
-        plotSize.y -= 20;  // Leave some space at bottom
+        // Begin plot with explicit size - use nearly the full available area
+        ImVec2 availSize = ImGui::GetContentRegionAvail();
+        ImVec2 plotSize(availSize.x * 0.95f, availSize.y * 0.75f);
         
-        if (ImPlot::BeginPlot(currentPlot.title.c_str(), plotSize, flags)) {
+        // Ensure plot title is not empty - ImPlot requires a non-empty ID
+        std::string plotTitle = currentPlot.title;
+        if (plotTitle.empty()) {
+            plotTitle = "Scatter Plot"; // Default title if empty
+        }
+        
+        LOG_DEBUG("Beginning ImPlot with title: '" + plotTitle + "' and size: " + 
+                 std::to_string(plotSize.x) + "x" + std::to_string(plotSize.y),
+                 "PlottingUtility");
+        
+        bool plotBegun = ImPlot::BeginPlot(plotTitle.c_str(), plotSize, flags);
+        
+        if (plotBegun) {
+            LOG_DEBUG("ImPlot::BeginPlot succeeded", "PlottingUtility");
+            
             // Set up axes with labels
             ImPlot::SetupAxis(ImAxis_X1, currentPlot.xLabel.c_str(), axisFlags);
             ImPlot::SetupAxis(ImAxis_Y1, currentPlot.yLabel.c_str(), axisFlags);
             
             // Add scatter plot
             if (currentPlot.xValues.size() > 0 && currentPlot.yValues.size() > 0) {
+                LOG_DEBUG("Plotting scatter points, count: " + 
+                         std::to_string(currentPlot.xValues.size()),
+                         "PlottingUtility");
+                
                 // Set marker style for data points - blue circles
                 ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 6.0f, ImVec4(0.0f, 0.45f, 0.85f, 1.0f), 2.0f);
                 
@@ -601,18 +676,44 @@ void PlottingUtility::renderScatterPlot() {
                 ImPlot::PlotLine("y=x", lineX.data(), lineY.data(), static_cast<int>(lineX.size()));
                 
                 LOG_DEBUG("Added identity line from " + std::to_string(min) + " to " + std::to_string(max), "PlottingUtility");
+            } else {
+                LOG_WARN("No data to plot in scatter plot", "PlottingUtility");
             }
             
             ImPlot::EndPlot();
             LOG_DEBUG("Scatter plot rendered successfully", "PlottingUtility");
         } else {
             LOG_WARN("ImPlot::BeginPlot failed for scatter plot", "PlottingUtility");
+            
+            // Check for ImGui/ImPlot errors
+            if (ImGui::GetIO().WantCaptureMouse) {
+                LOG_DEBUG("ImGui wants to capture mouse - might be interacting with UI", "PlottingUtility");
+            }
+            
+            // Get OpenGL error if any
+            GLenum err = glGetError();
+            if (err != GL_NO_ERROR) {
+                LOG_ERR("OpenGL error during plot creation: " + std::to_string(err), "PlottingUtility");
+            }
+            
+            // Render error text directly in ImGui
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create plot");
+            ImGui::Text("Check log for details");
         }
         
         ImPlot::PopStyleVar(2);
     }
     catch (const std::exception& e) {
         LOG_ERR("Exception during scatter plot rendering: " + std::string(e.what()), "PlottingUtility");
+        
+        // Display error text in ImGui
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error: %s", e.what());
+    }
+    catch (...) {
+        LOG_ERR("Unknown exception during scatter plot rendering", "PlottingUtility");
+        
+        // Display generic error text in ImGui
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Unknown error occurred during rendering");
     }
 }
 
@@ -620,11 +721,33 @@ void PlottingUtility::renderTimeSeriesPlot() {
     LOG_DEBUG("Rendering time series plot", "PlottingUtility");
     
     try {
-        if (ImPlot::BeginPlot(currentPlot.title.c_str(), ImVec2(-1, -1))) {
-            ImPlot::SetupAxes(currentPlot.xLabel.c_str(), currentPlot.yLabel.c_str());
+        // Set plot styling
+        ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(10, 10));
+        
+        // Set plot flags
+        ImPlotFlags flags = ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus;
+        ImPlotAxisFlags axisFlags = ImPlotAxisFlags_AutoFit;
+        
+        // Get available size and set plot dimensions
+        ImVec2 availSize = ImGui::GetContentRegionAvail();
+        ImVec2 plotSize(availSize.x * 0.95f, availSize.y * 0.75f);
+        
+        // Ensure plot title is not empty
+        std::string plotTitle = currentPlot.title;
+        if (plotTitle.empty()) {
+            plotTitle = "Time Series Plot";
+        }
+        
+        LOG_DEBUG("Beginning time series plot with title: '" + plotTitle + "'", "PlottingUtility");
+        
+        bool plotBegun = ImPlot::BeginPlot(plotTitle.c_str(), plotSize, flags);
+        if (plotBegun) {
+            ImPlot::SetupAxis(ImAxis_X1, currentPlot.xLabel.c_str(), axisFlags);
+            ImPlot::SetupAxis(ImAxis_Y1, currentPlot.yLabel.c_str(), axisFlags);
             
             // Add actual values line
             if (currentPlot.xValues.size() > 0 && currentPlot.yValues.size() > 0) {
+                ImPlot::SetNextLineStyle(ImVec4(0.0f, 0.45f, 0.85f, 1.0f), 2.0f);
                 ImPlot::PlotLine("Actual", 
                                currentPlot.xValues.data(), 
                                currentPlot.yValues.data(), 
@@ -633,6 +756,7 @@ void PlottingUtility::renderTimeSeriesPlot() {
             
             // Add predicted values line
             if (currentPlot.xValues.size() > 0 && currentPlot.y2Values.size() > 0) {
+                ImPlot::SetNextLineStyle(ImVec4(1.0f, 0.4f, 0.0f, 1.0f), 2.0f);
                 ImPlot::PlotLine("Predicted", 
                                currentPlot.xValues.data(), 
                                currentPlot.y2Values.data(), 
@@ -643,10 +767,14 @@ void PlottingUtility::renderTimeSeriesPlot() {
             LOG_DEBUG("Time series plot rendered successfully", "PlottingUtility");
         } else {
             LOG_WARN("ImPlot::BeginPlot failed for time series plot", "PlottingUtility");
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create time series plot");
         }
+        
+        ImPlot::PopStyleVar();
     }
     catch (const std::exception& e) {
         LOG_ERR("Exception during time series plot rendering: " + std::string(e.what()), "PlottingUtility");
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error: %s", e.what());
     }
 }
 
@@ -654,11 +782,34 @@ void PlottingUtility::renderResidualPlot() {
     LOG_DEBUG("Rendering residual plot", "PlottingUtility");
     
     try {
-        if (ImPlot::BeginPlot(currentPlot.title.c_str(), ImVec2(-1, -1))) {
-            ImPlot::SetupAxes(currentPlot.xLabel.c_str(), currentPlot.yLabel.c_str());
+        // Set plot styling
+        ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(10, 10));
+        ImPlot::PushStyleVar(ImPlotStyleVar_MarkerSize, 4.0f);
+        
+        // Set plot flags
+        ImPlotFlags flags = ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus;
+        ImPlotAxisFlags axisFlags = ImPlotAxisFlags_AutoFit;
+        
+        // Get available size and set plot dimensions
+        ImVec2 availSize = ImGui::GetContentRegionAvail();
+        ImVec2 plotSize(availSize.x * 0.95f, availSize.y * 0.75f);
+        
+        // Ensure plot title is not empty
+        std::string plotTitle = currentPlot.title;
+        if (plotTitle.empty()) {
+            plotTitle = "Residual Plot";
+        }
+        
+        LOG_DEBUG("Beginning residual plot with title: '" + plotTitle + "'", "PlottingUtility");
+        
+        bool plotBegun = ImPlot::BeginPlot(plotTitle.c_str(), plotSize, flags);
+        if (plotBegun) {
+            ImPlot::SetupAxis(ImAxis_X1, currentPlot.xLabel.c_str(), axisFlags);
+            ImPlot::SetupAxis(ImAxis_Y1, currentPlot.yLabel.c_str(), axisFlags);
             
             // Add residual scatter plot
             if (currentPlot.xValues.size() > 0 && currentPlot.yValues.size() > 0) {
+                ImPlot::SetNextMarkerStyle(ImPlotMarker_Circle, 4.0f, ImVec4(0.0f, 0.45f, 0.85f, 1.0f), 1.5f);
                 ImPlot::PlotScatter("Residuals", 
                                   currentPlot.xValues.data(), 
                                   currentPlot.yValues.data(), 
@@ -672,6 +823,7 @@ void PlottingUtility::renderResidualPlot() {
                 std::vector<double> lineX = {minX, maxX};
                 std::vector<double> lineY = {0.0, 0.0};
                 
+                ImPlot::SetNextLineStyle(ImVec4(0.8f, 0.0f, 0.0f, 1.0f), 1.5f);
                 ImPlot::PlotLine("Zero", lineX.data(), lineY.data(), static_cast<int>(lineX.size()));
                 
                 LOG_DEBUG("Added zero line from x=" + std::to_string(minX) + " to x=" + std::to_string(maxX), "PlottingUtility");
@@ -681,10 +833,14 @@ void PlottingUtility::renderResidualPlot() {
             LOG_DEBUG("Residual plot rendered successfully", "PlottingUtility");
         } else {
             LOG_WARN("ImPlot::BeginPlot failed for residual plot", "PlottingUtility");
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create residual plot");
         }
+        
+        ImPlot::PopStyleVar(2);
     }
     catch (const std::exception& e) {
         LOG_ERR("Exception during residual plot rendering: " + std::string(e.what()), "PlottingUtility");
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error: %s", e.what());
     }
 }
 
@@ -692,10 +848,29 @@ void PlottingUtility::renderImportancePlot() {
     LOG_DEBUG("Rendering importance plot", "PlottingUtility");
     
     try {
-        if (ImPlot::BeginPlot(currentPlot.title.c_str(), ImVec2(-1, -1))) {
+        // Set plot styling
+        ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(10, 10));
+        
+        // Set plot flags
+        ImPlotFlags flags = ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus;
+        
+        // Get available size and set plot dimensions
+        ImVec2 availSize = ImGui::GetContentRegionAvail();
+        ImVec2 plotSize(availSize.x * 0.95f, availSize.y * 0.75f);
+        
+        // Ensure plot title is not empty
+        std::string plotTitle = currentPlot.title;
+        if (plotTitle.empty()) {
+            plotTitle = "Feature Importance";
+        }
+        
+        LOG_DEBUG("Beginning importance plot with title: '" + plotTitle + "'", "PlottingUtility");
+        
+        bool plotBegun = ImPlot::BeginPlot(plotTitle.c_str(), plotSize, flags);
+        if (plotBegun) {
             // For feature importance, we create a horizontal bar chart
-            ImPlot::SetupAxes(currentPlot.xLabel.c_str(), currentPlot.yLabel.c_str(), 
-                            ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+            ImPlot::SetupAxis(ImAxis_X1, currentPlot.xLabel.c_str(), ImPlotAxisFlags_AutoFit);
+            ImPlot::SetupAxis(ImAxis_Y1, currentPlot.yLabel.c_str(), ImPlotAxisFlags_AutoFit);
             
             // Convert unordered_map to vectors and sort by importance
             std::vector<std::pair<std::string, double>> sortedImportance;
@@ -721,6 +896,7 @@ void PlottingUtility::renderImportancePlot() {
             
             // Bar chart
             if (!values.empty()) {
+                ImPlot::SetNextFillStyle(ImVec4(0.0f, 0.45f, 0.85f, 0.8f));
                 ImPlot::PlotBars("Importance", values.data(), static_cast<int>(values.size()), 0.75, 0.0, ImPlotBarsFlags_Horizontal);
             }
             
@@ -728,10 +904,14 @@ void PlottingUtility::renderImportancePlot() {
             LOG_DEBUG("Importance plot rendered successfully", "PlottingUtility");
         } else {
             LOG_WARN("ImPlot::BeginPlot failed for importance plot", "PlottingUtility");
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create importance plot");
         }
+        
+        ImPlot::PopStyleVar();
     }
     catch (const std::exception& e) {
         LOG_ERR("Exception during importance plot rendering: " + std::string(e.what()), "PlottingUtility");
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error: %s", e.what());
     }
 }
 
@@ -739,11 +919,33 @@ void PlottingUtility::renderLearningCurvePlot() {
     LOG_DEBUG("Rendering learning curve plot", "PlottingUtility");
     
     try {
-        if (ImPlot::BeginPlot(currentPlot.title.c_str(), ImVec2(-1, -1))) {
-            ImPlot::SetupAxes(currentPlot.xLabel.c_str(), currentPlot.yLabel.c_str());
+        // Set plot styling
+        ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(10, 10));
+        
+        // Set plot flags
+        ImPlotFlags flags = ImPlotFlags_NoMouseText | ImPlotFlags_NoMenus;
+        ImPlotAxisFlags axisFlags = ImPlotAxisFlags_AutoFit;
+        
+        // Get available size and set plot dimensions
+        ImVec2 availSize = ImGui::GetContentRegionAvail();
+        ImVec2 plotSize(availSize.x * 0.95f, availSize.y * 0.75f);
+        
+        // Ensure plot title is not empty
+        std::string plotTitle = currentPlot.title;
+        if (plotTitle.empty()) {
+            plotTitle = "Learning Curve";
+        }
+        
+        LOG_DEBUG("Beginning learning curve plot with title: '" + plotTitle + "'", "PlottingUtility");
+        
+        bool plotBegun = ImPlot::BeginPlot(plotTitle.c_str(), plotSize, flags);
+        if (plotBegun) {
+            ImPlot::SetupAxis(ImAxis_X1, currentPlot.xLabel.c_str(), axisFlags);
+            ImPlot::SetupAxis(ImAxis_Y1, currentPlot.yLabel.c_str(), axisFlags);
             
             // Add training score line
             if (currentPlot.trainingSizes.size() > 0 && currentPlot.trainingScores.size() > 0) {
+                ImPlot::SetNextLineStyle(ImVec4(0.0f, 0.45f, 0.85f, 1.0f), 2.0f);
                 ImPlot::PlotLine("Training Score", 
                                currentPlot.trainingSizes.data(), 
                                currentPlot.trainingScores.data(), 
@@ -752,6 +954,7 @@ void PlottingUtility::renderLearningCurvePlot() {
             
             // Add validation score line
             if (currentPlot.trainingSizes.size() > 0 && currentPlot.validationScores.size() > 0) {
+                ImPlot::SetNextLineStyle(ImVec4(1.0f, 0.4f, 0.0f, 1.0f), 2.0f);
                 ImPlot::PlotLine("Validation Score", 
                                currentPlot.trainingSizes.data(), 
                                currentPlot.validationScores.data(), 
@@ -761,15 +964,28 @@ void PlottingUtility::renderLearningCurvePlot() {
             ImPlot::EndPlot();
             LOG_DEBUG("Learning curve plot rendering completed", "PlottingUtility");
         } else {
-            LOG_ERR("Failed to begin learning curve plot", "PlottingUtility");
+            LOG_WARN("Failed to begin learning curve plot", "PlottingUtility");
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create learning curve plot");
         }
+        
+        ImPlot::PopStyleVar();
     }
     catch (const std::exception& e) {
         LOG_ERR("Exception during learning curve plot rendering: " + std::string(e.what()), "PlottingUtility");
+        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error: %s", e.what());
     }
 }
 
 void PlottingUtility::clear() {
     LOG_INFO("Clearing current plot data", "PlottingUtility");
     currentPlot = PlotData();
+}
+
+bool PlottingUtility::ensureFrameIsClean() {
+    if (ImGui::GetCurrentContext() && ImGui::GetFrameCount() > 0) {
+        LOG_WARN("ImGui frame might be in progress, ending it to be safe", "PlottingUtility");
+        ImGui::EndFrame();
+        return true;
+    }
+    return false;
 }
